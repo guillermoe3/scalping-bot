@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, Tuple
 
-from config import SQUEEZE_COMPRESSION_ATR, SQUEEZE_LEVEL_ATR_PROXIMITY, SQUEEZE_MIN_BARS
+from config import SPREAD_FILTER_ATR_PCT, SQUEEZE_COMPRESSION_ATR, SQUEEZE_LEVEL_ATR_PROXIMITY, SQUEEZE_MIN_BARS
 from order_flow import detect_cvd_divergence, get_book_imbalance
 from state import MarketState, Regime, Side
 
@@ -85,6 +85,14 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
 
     direction = state.squeeze_direction
     if direction is None:
+        return None
+
+    # Spread filter — refuse to trade when the book is abnormally wide
+    if state.atr > 0 and state.spread > SPREAD_FILTER_ATR_PCT * state.atr:
+        logger.debug(
+            "Signal rejected: spread %.4f exceeds %.0f%% of ATR %.4f",
+            state.spread, SPREAD_FILTER_ATR_PCT * 100, state.atr,
+        )
         return None
 
     # Hard block: never trade against confirmed 15m trend
