@@ -9,11 +9,12 @@ from dotenv import load_dotenv
 
 from context import MacroFilter, update_mtf_trends
 from data_feed import DataFeed
-from execution import ExecutionEngine
+from execution import ExecutionEngine, PAPER_MODE
 from indicators import detect_swing_points, update_indicators
 from momentum import update_volume_velocity
 from order_flow import snapshot_cvd_on_close
 from regime import update_mtf_trend, update_regime
+import safety
 from signals import check_entry_signal, update_squeeze
 from state import Candle, MarketState
 
@@ -29,9 +30,14 @@ logger = logging.getLogger(__name__)
 
 async def run() -> None:
     state = MarketState()
+    safety.load_into_state(state)
+
     feed = DataFeed(state)
     engine = ExecutionEngine(state)
     macro = MacroFilter(state)
+
+    if not PAPER_MODE:
+        safety.reconcile_with_exchange(state, engine.exchange)
 
     # -------------------------------------------------------------------------
     # Tick handler — runs on every trade event (sub-second)
@@ -67,8 +73,8 @@ async def run() -> None:
         # 6. Evaluate squeeze state
         update_squeeze(state)
 
-        # 7. Check for entry signal (only if flat)
-        if state.position is None:
+        # 7. Check for entry signal (only if flat and kill switch is not active)
+        if state.position is None and safety.can_open_new_position(state):
             signal = check_entry_signal(state)
             if signal is not None:
                 await engine.enter(signal)
