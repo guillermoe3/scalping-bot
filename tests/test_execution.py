@@ -3,8 +3,16 @@ import asyncio
 import pytest
 
 import execution as execution_module
+import safety
 from execution import ExecutionEngine
 from state import MarketState, Side
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state_file(tmp_path, monkeypatch):
+    path = tmp_path / "safety_state.json"
+    monkeypatch.setattr(safety, "STATE_FILE_PATH", str(path))
+    return path
 
 
 def _state_with_book(bid: float = 99.0, ask: float = 101.0, last_price: float = 100.0) -> MarketState:
