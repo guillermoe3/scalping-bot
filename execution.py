@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 
-from risk import close_position, manage_position, open_position
+from risk import apply_partial_close, close_position, manage_position, open_position
 from state import MarketState, Side
 
 logger = logging.getLogger(__name__)
@@ -43,13 +43,16 @@ class ExecutionEngine:
             logger.exception("Exchange init failed — running in paper mode")
             self._exchange = None
 
+    @property
+    def exchange(self):
+        return self._exchange
+
     async def enter(self, side: Side) -> bool:
-        price = self.state.last_price
-        if price <= 0:
+        if self.state.last_bid <= 0 or self.state.last_ask <= 0:
             return False
 
-        # Always set up position in state first (determines size, SL, TP)
-        open_position(self.state, side, price)
+        fill_price = self.state.last_ask if side == Side.LONG else self.state.last_bid
+        open_position(self.state, side, fill_price)
 
         if PAPER_MODE or self._exchange is None:
             return True
@@ -73,8 +76,8 @@ class ExecutionEngine:
         if self.state.position is None:
             return 0.0
 
-        price = self.state.last_price
         pos = self.state.position
+        fill_price = self.state.last_bid if pos.side == Side.LONG else self.state.last_ask
 
         if not (PAPER_MODE or self._exchange is None):
             try:
@@ -86,12 +89,35 @@ class ExecutionEngine:
             except Exception:
                 logger.exception("Live exit order failed")
 
-        return close_position(self.state, price, reason)
+        return close_position(self.state, fill_price, reason)
+
+    async def partial_exit(self, close_size: float, reason: str) -> float:
+        pos = self.state.position
+        if pos is None:
+            return 0.0
+
+        fill_price = self.state.last_bid if pos.side == Side.LONG else self.state.last_ask
+
+        if not (PAPER_MODE or self._exchange is None):
+            try:
+                order_side = "sell" if pos.side == Side.LONG else "buy"
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self._exchange.create_market_order(
+                        "BTC/USDT", order_side, close_size, params={"reduceOnly": True},
+                    ),
+                )
+            except Exception:
+                logger.exception("Live partial-exit order failed")
+
+        return apply_partial_close(self.state, close_size, fill_price)
 
     async def monitor_and_exit(self) -> None:
-        """Called on every trade tick. Evaluates all exit conditions."""
+        """Called on every trade tick. Evaluates TP1 and all exit conditions."""
         if self.state.position is None:
             return
-        reason = manage_position(self.state)
+        tp1_close_size, reason = manage_position(self.state)
+        if tp1_close_size:
+            await self.partial_exit(tp1_close_size, "tp1")
         if reason:
             await self.exit(reason)
