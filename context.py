@@ -63,7 +63,10 @@ class MacroFilter:
         loop = asyncio.get_event_loop()
         spy_data = await loop.run_in_executor(
             None,
-            lambda: yf.download("SPY", period="1d", interval="15m", progress=False, auto_adjust=True),
+            lambda: yf.download(
+                "SPY", period="1d", interval="15m", progress=False,
+                auto_adjust=True, multi_level_index=False,
+            ),
         )
 
         if spy_data is None or spy_data.empty:
@@ -73,7 +76,7 @@ class MacroFilter:
         if len(spy_closes) < 6:
             return
 
-        btc_candles = list(state.candles_15m) if hasattr(self, '_use_state_attr') else list(self.state.candles_15m)
+        btc_candles = list(self.state.candles_15m)
         if len(btc_candles) < 6:
             return
 
