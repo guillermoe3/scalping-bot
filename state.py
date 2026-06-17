@@ -80,6 +80,8 @@ class Position:
     tp1_hit: bool = False
     breakeven_moved: bool = False
     trailing_stop: Optional[float] = None
+    fees_paid: float = 0.0
+    realized_pnl: float = 0.0
 
 
 @dataclass
@@ -146,3 +148,8 @@ class MarketState:
     # Session tracking
     trades_today: int = 0
     pnl_today: float = 0.0
+
+    # Daily safety / kill switch
+    consecutive_losses: int = 0
+    kill_switch_active: bool = False
+    last_reset_date: Optional[str] = None
