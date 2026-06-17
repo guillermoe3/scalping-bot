@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -106,3 +107,49 @@ def load_into_state(state: MarketState) -> None:
     state.consecutive_losses = payload.get("consecutive_losses", 0)
     state.kill_switch_active = payload.get("kill_switch_active", False)
     state.position = _position_from_dict(payload.get("position"))
+
+
+_SIZE_TOLERANCE_PCT = 0.001  # 0.1% size tolerance when matching persisted vs exchange position
+
+
+def _fetch_exchange_position(exchange) -> Optional[dict]:
+    positions = exchange.fetch_positions(["BTC/USDT"])
+    for p in positions:
+        contracts = float(p.get("contracts") or 0)
+        if contracts > 0:
+            side = Side.LONG if p.get("side") == "long" else Side.SHORT
+            return {"side": side, "size": contracts}
+    return None
+
+
+def reconcile_with_exchange(state: MarketState, exchange) -> None:
+    """Compares the persisted position (already loaded into state.position by
+    load_into_state) against the exchange's real reported position. Exits the
+    process rather than guessing when they disagree."""
+    try:
+        exchange_pos = _fetch_exchange_position(exchange)
+    except Exception:
+        logger.error("Could not fetch exchange positions for reconciliation", exc_info=True)
+        sys.exit(1)
+
+    persisted = state.position
+
+    if persisted is None and exchange_pos is None:
+        logger.info("Reconciliation OK: no open position on either side")
+        return
+
+    if persisted is not None and exchange_pos is not None:
+        size_diff_pct = abs(persisted.size - exchange_pos["size"]) / exchange_pos["size"]
+        if persisted.side == exchange_pos["side"] and size_diff_pct <= _SIZE_TOLERANCE_PCT:
+            logger.info(
+                "Reconciliation OK: resuming %s position, size=%.6f",
+                persisted.side.value, persisted.size,
+            )
+            return
+
+    logger.error(
+        "RECONCILIATION MISMATCH — persisted=%s exchange=%s — refusing to start, "
+        "manual review required",
+        persisted, exchange_pos,
+    )
+    sys.exit(1)

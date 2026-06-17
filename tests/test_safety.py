@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 
@@ -160,3 +161,75 @@ def test_save_state_does_not_raise_when_write_fails(monkeypatch, tmp_path):
     state = MarketState()
 
     safety.save_state(state)  # must not raise
+
+
+class _FakeExchange:
+    def __init__(self, positions):
+        self._positions = positions
+
+    def fetch_positions(self, symbols):
+        return self._positions
+
+
+class _FailingExchange:
+    def fetch_positions(self, symbols):
+        raise RuntimeError("network down")
+
+
+def test_reconcile_ok_when_both_sides_flat():
+    state = MarketState()
+    exchange = _FakeExchange([])
+
+    safety.reconcile_with_exchange(state, exchange)  # must not raise/exit
+
+
+def test_reconcile_ok_when_positions_match():
+    state = MarketState()
+    state.position = Position(
+        side=Side.LONG,
+        entry_price=100.0,
+        size=0.5,
+        entry_time=0.0,
+        stop_loss=95.0,
+        tp1=110.0,
+        initial_atr=2.0,
+        initial_sl_distance=5.0,
+    )
+    exchange = _FakeExchange([{"contracts": 0.5, "side": "long"}])
+
+    safety.reconcile_with_exchange(state, exchange)  # must not raise/exit
+    assert state.position is not None  # persisted position is left intact
+
+
+def test_reconcile_exits_on_size_mismatch():
+    state = MarketState()
+    state.position = Position(
+        side=Side.LONG,
+        entry_price=100.0,
+        size=0.5,
+        entry_time=0.0,
+        stop_loss=95.0,
+        tp1=110.0,
+        initial_atr=2.0,
+        initial_sl_distance=5.0,
+    )
+    exchange = _FakeExchange([{"contracts": 0.9, "side": "long"}])
+
+    with pytest.raises(SystemExit):
+        safety.reconcile_with_exchange(state, exchange)
+
+
+def test_reconcile_exits_when_only_exchange_has_a_position():
+    state = MarketState()
+    exchange = _FakeExchange([{"contracts": 0.5, "side": "long"}])
+
+    with pytest.raises(SystemExit):
+        safety.reconcile_with_exchange(state, exchange)
+
+
+def test_reconcile_exits_on_exchange_query_failure():
+    state = MarketState()
+    exchange = _FailingExchange()
+
+    with pytest.raises(SystemExit):
+        safety.reconcile_with_exchange(state, exchange)
