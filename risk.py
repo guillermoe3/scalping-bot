@@ -4,11 +4,13 @@ import logging
 import time
 from typing import Optional
 
+import safety
 from config import (
     ACCOUNT_RISK_PCT,
     ATR_BREATHING_THRESHOLD,
     BREAKEVEN_ATR_TRIGGER,
     INITIAL_SL_ATR,
+    TAKER_FEE_RATE,
     TIME_EXIT_MINUTES,
     TP1_CLOSE_PCT,
     TP1_RR,
@@ -55,6 +57,7 @@ def open_position(
     stop_loss, tp1 = _compute_levels(side, price, state.atr)
     size = _compute_size(price, stop_loss, balance)
     sl_dist = abs(price - stop_loss)
+    entry_fee = size * price * TAKER_FEE_RATE
 
     state.position = Position(
         side=side,
@@ -65,12 +68,15 @@ def open_position(
         tp1=tp1,
         initial_atr=state.atr,
         initial_sl_distance=sl_dist,
+        fees_paid=entry_fee,
+        realized_pnl=-entry_fee,
     )
+    state.pnl_today -= entry_fee
     state.prior_volume_velocity = state.volume_velocity
 
     logger.info(
-        "OPEN %s @ %.2f | SL=%.2f | TP1=%.2f | size=%.6f BTC | risk=$%.2f",
-        side.value.upper(), price, stop_loss, tp1, size, size * sl_dist,
+        "OPEN %s @ %.2f | SL=%.2f | TP1=%.2f | size=%.6f BTC | risk=$%.2f | entry_fee=$%.2f",
+        side.value.upper(), price, stop_loss, tp1, size, size * sl_dist, entry_fee,
     )
 
 
@@ -79,21 +85,29 @@ def close_position(state: MarketState, price: float, reason: str) -> float:
     if pos is None:
         return 0.0
 
-    pnl = (
+    gross = (
         (price - pos.entry_price) * pos.size
         if pos.side == Side.LONG
         else (pos.entry_price - price) * pos.size
     )
+    fee = pos.size * price * TAKER_FEE_RATE
+    net = gross - fee
 
-    state.pnl_today += pnl
+    pos.fees_paid += fee
+    pos.realized_pnl += net
+
+    state.pnl_today += net
     state.trades_today += 1
+    total_trade_net = pos.realized_pnl
     state.position = None
 
     logger.info(
-        "CLOSE %s @ %.2f | reason=%-16s | P&L=$%+.2f | daily=$%+.2f",
-        pos.side.value.upper(), price, reason, pnl, state.pnl_today,
+        "CLOSE %s @ %.2f | reason=%-16s | leg_net=$%+.2f | trade_net=$%+.2f | daily=$%+.2f",
+        pos.side.value.upper(), price, reason, net, total_trade_net, state.pnl_today,
     )
-    return pnl
+
+    safety.after_trade_closed(state, total_trade_net, PAPER_BALANCE_USDT)
+    return net
 
 
 # --- Dynamic stop management ---
@@ -172,32 +186,63 @@ def _apply_structural_trail(state: MarketState) -> None:
                 logger.debug("Structural trail: SL → %.2f", trail)
 
 
-def _handle_tp1(state: MarketState) -> None:
+def check_tp1(state: MarketState) -> Optional[float]:
+    """Returns the size (BTC) to close if TP1 is hit for the first time, else None.
+    Marks pos.tp1_hit so it only fires once. Does not mutate size or PnL —
+    execution.partial_exit applies the real fill via apply_partial_close."""
     pos = state.position
     if pos is None or pos.tp1_hit:
-        return
+        return None
 
     price = state.last_price
     hit = (pos.side == Side.LONG and price >= pos.tp1) or \
           (pos.side == Side.SHORT and price <= pos.tp1)
 
-    if hit:
-        pos.tp1_hit = True
-        pos.size = round(pos.size * (1.0 - TP1_CLOSE_PCT), 6)
-        logger.info("TP1 hit @ %.2f — position reduced to %.6f BTC", price, pos.size)
+    if not hit:
+        return None
+
+    pos.tp1_hit = True
+    return round(pos.size * TP1_CLOSE_PCT, 6)
+
+
+def apply_partial_close(state: MarketState, close_size: float, fill_price: float) -> float:
+    """Realizes PnL (net of fee) for a partial close of close_size BTC at fill_price,
+    shrinks pos.size accordingly, and returns the net P&L for this leg."""
+    pos = state.position
+    if pos is None:
+        return 0.0
+
+    gross = (
+        (fill_price - pos.entry_price) * close_size
+        if pos.side == Side.LONG
+        else (pos.entry_price - fill_price) * close_size
+    )
+    fee = close_size * fill_price * TAKER_FEE_RATE
+    net = gross - fee
+
+    pos.size = round(pos.size - close_size, 6)
+    pos.fees_paid += fee
+    pos.realized_pnl += net
+    state.pnl_today += net
+
+    logger.info(
+        "TP1 hit @ %.2f — closed %.6f BTC | leg_net=$%+.2f | position reduced to %.6f BTC",
+        fill_price, close_size, net, pos.size,
+    )
+    return net
 
 
 # --- Main position monitor ---
 
-def manage_position(state: MarketState) -> Optional[str]:
+def manage_position(state: MarketState) -> tuple[Optional[float], Optional[str]]:
     """
-    Called on every tick. Returns an exit reason string or None.
-    Also handles TP1 partial close and all dynamic SL updates.
+    Called on every tick. Returns (tp1_close_size, exit_reason); either can be None.
+    Also handles all dynamic SL updates (breakeven, breathing, structural trail).
     """
     from momentum import should_abort_for_momentum
 
     if state.position is None:
-        return None
+        return None, None
 
     pos = state.position
     price = state.last_price
@@ -207,18 +252,18 @@ def manage_position(state: MarketState) -> Optional[str]:
     _apply_breakeven(state)
     _apply_breathing_stop(state)
     _apply_structural_trail(state)
-    _handle_tp1(state)
+    tp1_close_size = check_tp1(state)
 
     # Exit checks
     sl_hit = (pos.side == Side.LONG and price <= pos.stop_loss) or \
              (pos.side == Side.SHORT and price >= pos.stop_loss)
     if sl_hit:
-        return "stop_loss"
+        return tp1_close_size, "stop_loss"
 
     if held_min >= TIME_EXIT_MINUTES:
-        return "time_exit"
+        return tp1_close_size, "time_exit"
 
     if should_abort_for_momentum(state):
-        return "momentum_abort"
+        return tp1_close_size, "momentum_abort"
 
-    return None
+    return tp1_close_size, None

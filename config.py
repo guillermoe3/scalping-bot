@@ -68,3 +68,9 @@ KILL_SWITCH_CONSECUTIVE_LOSSES = 3      # 3 losing trades in a row halts new ent
 
 # State persistence
 STATE_FILE_PATH = "safety_state.json"
+
+# Fees
+TAKER_FEE_RATE = 0.0005   # 0.05% per side, Binance Futures USDT-M, no BNB discount
+
+# Spread filter
+SPREAD_FILTER_ATR_PCT = 0.05  # block entries when spread > 5% of 1m ATR
