@@ -5,7 +5,6 @@ import pandas as pd
 import pytest
 import yfinance as yf
 
-from config import CORRELATION_BLOCK_THRESHOLD
 from context import MacroFilter, _pearson, update_mtf_trends
 from state import Candle, MarketState, Side
 
