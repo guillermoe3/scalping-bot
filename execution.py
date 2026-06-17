@@ -16,7 +16,9 @@ class ExecutionEngine:
     """
     Handles order routing.
 
-    PAPER_MODE=true  → all orders are simulated at last_price with zero slippage.
+    PAPER_MODE=true  → orders are simulated by crossing the bid/ask spread (entries fill
+                        at last_ask/last_bid, exits at last_bid/last_ask), with no fee
+                        assumed beyond TAKER_FEE_RATE.
     PAPER_MODE=false → routes market orders via ccxt to Binance Futures.
 
     Position management (SL, TP, trailing) is always handled in-process regardless

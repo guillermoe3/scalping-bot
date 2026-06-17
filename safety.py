@@ -101,12 +101,23 @@ def load_into_state(state: MarketState) -> None:
         logger.warning("Could not parse %s — starting with fresh state", STATE_FILE_PATH)
         return
 
-    state.last_reset_date = payload.get("date_utc")
-    state.pnl_today = payload.get("pnl_today", 0.0)
-    state.trades_today = payload.get("trades_today", 0)
-    state.consecutive_losses = payload.get("consecutive_losses", 0)
-    state.kill_switch_active = payload.get("kill_switch_active", False)
-    state.position = _position_from_dict(payload.get("position"))
+    try:
+        last_reset_date = payload.get("date_utc")
+        pnl_today = payload.get("pnl_today", 0.0)
+        trades_today = payload.get("trades_today", 0)
+        consecutive_losses = payload.get("consecutive_losses", 0)
+        kill_switch_active = payload.get("kill_switch_active", False)
+        position = _position_from_dict(payload.get("position"))
+    except (TypeError, KeyError, ValueError):
+        logger.warning("Could not parse %s — starting with fresh state", STATE_FILE_PATH)
+        return
+
+    state.last_reset_date = last_reset_date
+    state.pnl_today = pnl_today
+    state.trades_today = trades_today
+    state.consecutive_losses = consecutive_losses
+    state.kill_switch_active = kill_switch_active
+    state.position = position
 
 
 _SIZE_TOLERANCE_PCT = 0.001  # 0.1% size tolerance when matching persisted vs exchange position

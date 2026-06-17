@@ -20,6 +20,13 @@ def _state_with_long_position(entry: float = 100.0, atr: float = 2.0) -> MarketS
     return state
 
 
+@pytest.fixture(autouse=True)
+def _isolate_state_file(tmp_path, monkeypatch):
+    path = tmp_path / "safety_state.json"
+    monkeypatch.setattr(safety, "STATE_FILE_PATH", str(path))
+    return path
+
+
 def test_open_position_deducts_entry_fee_from_pnl_today():
     state = _state_with_long_position(entry=100.0)
     pos = state.position
@@ -28,6 +35,21 @@ def test_open_position_deducts_entry_fee_from_pnl_today():
     assert pos.fees_paid == pytest.approx(expected_fee)
     assert pos.realized_pnl == pytest.approx(-expected_fee)
     assert state.pnl_today == pytest.approx(-expected_fee)
+
+
+def test_open_position_persists_state(_isolate_state_file):
+    state = _state_with_long_position(entry=100.0)
+    pos = state.position
+
+    assert _isolate_state_file.exists()
+
+    loaded = MarketState()
+    safety.load_into_state(loaded)
+
+    assert loaded.position is not None
+    assert loaded.position.side == Side.LONG
+    assert loaded.position.size == pytest.approx(pos.size)
+    assert loaded.position.entry_price == pytest.approx(pos.entry_price)
 
 
 def test_check_tp1_returns_close_size_once_when_price_reaches_target():
@@ -69,6 +91,23 @@ def test_apply_partial_close_credits_net_pnl_and_shrinks_size():
     assert pos.fees_paid == pytest.approx(entry_fee + expected_fee)
     assert pos.realized_pnl == pytest.approx(-entry_fee + expected_net)
     assert state.pnl_today == pytest.approx(-entry_fee + expected_net)
+
+
+def test_apply_partial_close_persists_state(_isolate_state_file):
+    state = _state_with_long_position(entry=100.0)
+    pos = state.position
+    close_size = round(pos.size * TP1_CLOSE_PCT, 6)
+
+    apply_partial_close(state, close_size, fill_price=110.0)
+
+    assert _isolate_state_file.exists()
+
+    loaded = MarketState()
+    safety.load_into_state(loaded)
+
+    assert loaded.position is not None
+    assert loaded.position.size == pytest.approx(pos.size)
+    assert loaded.position.realized_pnl == pytest.approx(pos.realized_pnl)
 
 
 def test_close_position_aggregates_realized_pnl_and_calls_kill_switch(monkeypatch):

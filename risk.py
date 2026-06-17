@@ -78,6 +78,7 @@ def open_position(
         "OPEN %s @ %.2f | SL=%.2f | TP1=%.2f | size=%.6f BTC | risk=$%.2f | entry_fee=$%.2f",
         side.value.upper(), price, stop_loss, tp1, size, size * sl_dist, entry_fee,
     )
+    safety.save_state(state)
 
 
 def close_position(state: MarketState, price: float, reason: str) -> float:
@@ -229,6 +230,7 @@ def apply_partial_close(state: MarketState, close_size: float, fill_price: float
         "TP1 hit @ %.2f — closed %.6f BTC | leg_net=$%+.2f | position reduced to %.6f BTC",
         fill_price, close_size, net, pos.size,
     )
+    safety.save_state(state)
     return net
 
 
