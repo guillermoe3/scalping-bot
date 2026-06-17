@@ -61,3 +61,10 @@ CANDLE_BUFFER = 200
 SWING_BUFFER = 20
 OB_SNAPSHOT_BUFFER = 10
 CVD_CANDLE_BUFFER = 20
+
+# Daily kill switch
+KILL_SWITCH_DAILY_LOSS_PCT = 0.02       # -2% of balance halts new entries for the rest of the UTC day
+KILL_SWITCH_CONSECUTIVE_LOSSES = 3      # 3 losing trades in a row halts new entries
+
+# State persistence
+STATE_FILE_PATH = "safety_state.json"
