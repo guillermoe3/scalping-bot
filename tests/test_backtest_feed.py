@@ -168,7 +168,7 @@ def test_resample_splits_into_separate_buckets_when_crossing_a_boundary():
     result = resample(klines_1m, minutes=5)
 
     assert result == [
-        [240_000, 104.0, 106.0, 103.0, 105.0, 1.0],
+        [0, 104.0, 106.0, 103.0, 105.0, 1.0],
         [300_000, 105.0, 107.0, 104.0, 106.0, 2.0],
     ]
 

@@ -99,7 +99,7 @@ def resample(klines_1m: List[list], minutes: int) -> List[list]:
         if bucket_start != current_bucket_start:
             if current is not None:
                 out.append(current)
-            current = [ts, o, h, l, c, v]
+            current = [bucket_start, o, h, l, c, v]
             current_bucket_start = bucket_start
         else:
             current[2] = max(current[2], h)
