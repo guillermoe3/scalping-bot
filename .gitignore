@@ -5,3 +5,4 @@ venv/
 .env
 safety_state.json
 .claude/settings.local.json
+.worktrees/
