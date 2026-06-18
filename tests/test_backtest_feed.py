@@ -140,3 +140,38 @@ def test_write_cache_does_not_leave_a_partial_file_on_interrupted_write(monkeypa
         backtest_feed._write_cache(path, [1, 2, 3])
 
     assert not os.path.exists(path)
+
+
+from backtest_feed import resample
+
+
+def test_resample_aggregates_five_one_minute_candles_into_one_5m_candle():
+    klines_1m = [
+        [0,       100.0, 102.0, 99.0,  101.0, 1.0],
+        [60_000,  101.0, 103.0, 100.0, 102.0, 2.0],
+        [120_000, 102.0, 104.0, 101.0, 103.0, 1.5],
+        [180_000, 103.0, 105.0, 102.0, 104.0, 0.5],
+        [240_000, 104.0, 106.0, 103.0, 105.0, 1.0],
+    ]
+
+    result = resample(klines_1m, minutes=5)
+
+    assert result == [[0, 100.0, 106.0, 99.0, 105.0, 6.0]]
+
+
+def test_resample_splits_into_separate_buckets_when_crossing_a_boundary():
+    klines_1m = [
+        [240_000, 104.0, 106.0, 103.0, 105.0, 1.0],  # last candle of bucket [0, 300000)
+        [300_000, 105.0, 107.0, 104.0, 106.0, 2.0],  # first candle of the next bucket
+    ]
+
+    result = resample(klines_1m, minutes=5)
+
+    assert result == [
+        [240_000, 104.0, 106.0, 103.0, 105.0, 1.0],
+        [300_000, 105.0, 107.0, 104.0, 106.0, 2.0],
+    ]
+
+
+def test_resample_returns_empty_list_for_empty_input():
+    assert resample([], minutes=15) == []

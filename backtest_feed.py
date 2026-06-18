@@ -79,3 +79,35 @@ def fetch_trades(exchange, symbol: str, start_ms: int, end_ms: int, use_cache: b
     if use_cache:
         _write_cache(path, trades)
     return trades
+
+
+def resample(klines_1m: List[list], minutes: int) -> List[list]:
+    """Aggregates 1m klines ([ts, o, h, l, c, v]) into `minutes`-minute
+    buckets aligned to UTC minute-of-day boundaries — mathematically
+    identical to what Binance's own 5m/15m klines would report, since 1m
+    boundaries are a superset of every coarser grid."""
+    if not klines_1m:
+        return []
+
+    bucket_ms = minutes * 60_000
+    out: List[list] = []
+    current_bucket_start: Optional[int] = None
+    current: Optional[list] = None
+
+    for ts, o, h, l, c, v in klines_1m:
+        bucket_start = (ts // bucket_ms) * bucket_ms
+        if bucket_start != current_bucket_start:
+            if current is not None:
+                out.append(current)
+            current = [ts, o, h, l, c, v]
+            current_bucket_start = bucket_start
+        else:
+            current[2] = max(current[2], h)
+            current[3] = min(current[3], l)
+            current[4] = c
+            current[5] += v
+
+    if current is not None:
+        out.append(current)
+
+    return out
