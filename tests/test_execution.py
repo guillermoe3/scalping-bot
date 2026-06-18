@@ -98,3 +98,49 @@ def test_exchange_property_exposes_underlying_client():
     engine._exchange = "fake-client"
 
     assert engine.exchange == "fake-client"
+
+
+def test_exit_calls_on_trade_closed_hook_with_full_trade_details():
+    state = _state_with_book(bid=99.0, ask=101.0)
+    captured = []
+    engine = ExecutionEngine(state, on_trade_closed=captured.append)
+    asyncio.run(engine.enter(Side.LONG))
+    entry_price = state.position.entry_price
+    size = state.position.size
+
+    net = asyncio.run(engine.exit("time_exit"))
+
+    assert len(captured) == 1
+    record = captured[0]
+    assert record["side"] == Side.LONG
+    assert record["entry_price"] == pytest.approx(entry_price)
+    assert record["exit_price"] == pytest.approx(99.0)
+    assert record["size"] == pytest.approx(size)
+    assert record["reason"] == "time_exit"
+    assert record["leg_net"] == pytest.approx(net)
+    assert record["total_trade_net"] is not None
+    assert record["is_partial"] is False
+
+
+def test_partial_exit_calls_on_trade_closed_hook_with_leg_size_not_remaining_size():
+    state = _state_with_book(bid=99.0, ask=101.0)
+    captured = []
+    engine = ExecutionEngine(state, on_trade_closed=captured.append)
+    asyncio.run(engine.enter(Side.LONG))
+    close_size = round(state.position.size * 0.5, 6)
+
+    asyncio.run(engine.partial_exit(close_size, "tp1"))
+
+    assert len(captured) == 1
+    record = captured[0]
+    assert record["size"] == pytest.approx(close_size)  # the closed leg, not the remainder
+    assert record["is_partial"] is True
+    assert record["total_trade_net"] is None
+
+
+def test_on_trade_closed_defaults_to_none_and_does_not_raise():
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine = ExecutionEngine(state)  # no on_trade_closed passed
+    asyncio.run(engine.enter(Side.LONG))
+
+    asyncio.run(engine.exit("time_exit"))  # must not raise
