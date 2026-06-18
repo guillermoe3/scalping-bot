@@ -175,3 +175,169 @@ def test_resample_splits_into_separate_buckets_when_crossing_a_boundary():
 
 def test_resample_returns_empty_list_for_empty_input():
     assert resample([], minutes=15) == []
+
+
+import asyncio
+
+import clock
+from backtest_feed import BacktestFeed
+from state import MarketState
+
+
+@pytest.fixture(autouse=True)
+def _reset_clock():
+    yield
+    clock.reset()
+
+
+async def _noop(*args):
+    return None
+
+
+def test_replay_fires_handlers_in_chronological_order():
+    klines_1m = [
+        [0,      100.0, 102.0, 99.0,  101.0, 2.0],
+        [60_000, 101.0, 103.0, 100.0, 102.0, 3.0],
+    ]
+    trades = [
+        {"timestamp": 10_000, "price": 100.5, "amount": 1.0, "side": "buy"},
+        {"timestamp": 30_000, "price": 101.0, "amount": 1.0, "side": "sell"},
+        {"timestamp": 70_000, "price": 101.5, "amount": 1.0, "side": "buy"},
+        {"timestamp": 90_000, "price": 102.0, "amount": 1.0, "side": "buy"},
+    ]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False)
+
+    fired = []
+
+    async def on_trade(price, qty, is_sell, ts):
+        fired.append(("trade", price))
+
+    async def on_candle_1m(candle):
+        fired.append(("candle_1m", candle.close))
+
+    feed.on_trade(on_trade)
+    feed.on_candle_1m(on_candle_1m)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=120_000))
+
+    assert fired == [
+        ("trade", 100.5),
+        ("trade", 101.0),
+        ("candle_1m", 101.0),
+        ("trade", 101.5),
+        ("trade", 102.0),
+        ("candle_1m", 102.0),
+    ]
+
+
+def test_replay_synthesizes_bid_ask_spread_from_price():
+    klines_1m = [[0, 100.0, 100.0, 100.0, 100.0, 1.0]]
+    trades = [{"timestamp": 10_000, "price": 100.0, "amount": 1.0, "side": "buy"}]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False, spread_pct=0.001)
+
+    seen = []
+
+    async def on_trade(price, qty, is_sell, ts):
+        seen.append((state.last_bid, state.last_ask, state.spread))
+
+    feed.on_trade(on_trade)
+    feed.on_candle_1m(_noop)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=60_000))
+
+    bid, ask, spread = seen[0]
+    assert spread == pytest.approx(0.1)
+    assert bid == pytest.approx(99.95)
+    assert ask == pytest.approx(100.05)
+
+
+def test_replay_updates_cvd_from_the_real_trade_side():
+    klines_1m = [[0, 100.0, 100.0, 100.0, 100.0, 1.0]]
+    trades = [
+        {"timestamp": 10_000, "price": 100.0, "amount": 3.0, "side": "buy"},
+        {"timestamp": 20_000, "price": 100.0, "amount": 1.0, "side": "sell"},
+    ]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False)
+    feed.on_trade(_noop)
+    feed.on_candle_1m(_noop)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=60_000))
+
+    assert state.cvd == pytest.approx(2.0)  # +3.0 (buy) - 1.0 (sell)
+
+
+def test_replay_sets_the_simulated_clock_before_dispatching_each_event():
+    klines_1m = [[0, 100.0, 100.0, 100.0, 100.0, 1.0]]
+    trades = [{"timestamp": 10_000, "price": 100.0, "amount": 1.0, "side": "buy"}]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False)
+
+    seen = []
+
+    async def on_trade(*args):
+        seen.append(clock.now())
+
+    feed.on_trade(on_trade)
+    feed.on_candle_1m(_noop)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=60_000))
+
+    assert seen == [10.0]
+
+
+def test_replay_resets_live_1m_after_each_candle_close():
+    klines_1m = [
+        [0,      100.0, 102.0, 99.0,  101.0, 2.0],
+        [60_000, 101.0, 103.0, 100.0, 102.0, 3.0],
+    ]
+    trades = [
+        {"timestamp": 10_000, "price": 100.5, "amount": 1.0, "side": "buy"},
+        {"timestamp": 70_000, "price": 101.5, "amount": 1.0, "side": "buy"},
+    ]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False)
+
+    closes_seen = []
+
+    async def on_trade(*args):
+        closes_seen.append(state.live_1m.close if state.live_1m else None)
+
+    feed.on_trade(on_trade)
+    feed.on_candle_1m(_noop)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=120_000))
+
+    assert closes_seen == [100.5, 101.5]
+    assert state.live_1m is None
+    assert len(state.candles_1m) == 2
+
+
+def test_replay_raises_a_clear_error_when_no_klines_are_available():
+    exchange = _FakeExchange(klines=[], trades=[])
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False)
+    feed.on_trade(_noop)
+    feed.on_candle_1m(_noop)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    with pytest.raises(ValueError, match="No historical data available"):
+        asyncio.run(feed.replay(start_ms=0, end_ms=60_000))
