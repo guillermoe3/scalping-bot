@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 _Handler = Callable[..., Awaitable[None]]
 
 
+def update_live_candles(state: MarketState, price: float, qty: float) -> None:
+    for live in (state.live_1m, state.live_5m, state.live_15m):
+        if live is not None:
+            live.high = max(live.high, price)
+            live.low = min(live.low, price)
+            live.close = price
+            live.volume += qty
+
+
 class DataFeed:
     """
     Subscribes to Binance combined stream:
@@ -103,7 +112,7 @@ class DataFeed:
         ts = d["T"] / 1000.0
 
         self.state.last_price = price
-        self._update_live_candles(price, qty)
+        update_live_candles(self.state, price, qty)
 
         # Running CVD: buy aggressor adds, sell aggressor subtracts
         if is_buyer_maker:
@@ -112,14 +121,6 @@ class DataFeed:
             self.state.cvd += qty
 
         await self._emit(self._trade_handlers, price, qty, is_buyer_maker, ts)
-
-    def _update_live_candles(self, price: float, qty: float) -> None:
-        for live in (self.state.live_1m, self.state.live_5m, self.state.live_15m):
-            if live is not None:
-                live.high = max(live.high, price)
-                live.low = min(live.low, price)
-                live.close = price
-                live.volume += qty
 
     async def _handle_kline(self, d: dict) -> None:
         k = d["k"]
