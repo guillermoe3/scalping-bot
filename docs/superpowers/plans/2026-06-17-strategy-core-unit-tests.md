@@ -1,6 +1,6 @@
 # Strategy-Core Unit Test Coverage Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Bring the strategy core (`indicators.py`, `momentum.py`, `order_flow.py`, `regime.py`, `context.py`, and the rest of `signals.py`) from zero test coverage to full coverage, fixing two bugs in `context.py` that block writing a correct test for it.
 
@@ -28,7 +28,7 @@
 - Consumes: `compute_atr(candles: deque, period: int = ATR_PERIOD) -> float`, `compute_ema(values: List[float], period: int) -> float`, `ema_period_for_regime(regime: Regime) -> int`, `detect_swing_points(candles: deque, lookback: int = 5) -> Tuple[List[float], List[float]]`, `update_indicators(state: MarketState) -> None` — all from `indicators.py`. `Candle`, `MarketState`, `Regime` from `state.py`. `EMA_PERIOD_BREAKOUT`, `EMA_PERIOD_CHANNEL`, `EMA_PERIOD_RANGE` from `config.py`.
 - Produces: nothing consumed by later tasks — this file is self-contained.
 
-- [ ] **Step 1: Write the full test file**
+- [x] **Step 1: Write the full test file**
 
 ```python
 from collections import deque
@@ -135,12 +135,12 @@ def test_update_indicators_uses_regime_adaptive_period_for_1m_ema():
     assert breakout_state.ema != pytest.approx(unknown_state.ema)
 ```
 
-- [ ] **Step 2: Run the new tests**
+- [x] **Step 2: Run the new tests**
 
 Run: `.venv/bin/pytest tests/test_indicators.py -v`
 Expected: `9 passed` — all of `test_compute_atr_returns_zero_with_fewer_than_two_candles`, `test_compute_atr_matches_hand_calculated_wilder_value`, `test_compute_ema_returns_zero_for_empty_list`, `test_compute_ema_matches_hand_calculated_value`, `test_ema_period_for_regime_maps_each_regime_to_its_configured_period`, `test_detect_swing_points_returns_empty_below_minimum_candle_count`, `test_detect_swing_points_finds_known_peak_and_valley`, `test_update_indicators_sets_atr_and_all_ema_fields`, `test_update_indicators_uses_regime_adaptive_period_for_1m_ema` PASSED.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_indicators.py
@@ -158,7 +158,7 @@ git commit -m "Add unit tests for indicators.py"
 - Consumes: `update_volume_velocity(state: MarketState) -> None`, `should_abort_for_momentum(state: MarketState) -> bool` from `momentum.py`. `Candle`, `MarketState`, `Position`, `Side` from `state.py`. `MOMENTUM_ABORT_MINUTES` from `config.py`.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the full test file**
+- [x] **Step 1: Write the full test file**
 
 ```python
 import time
@@ -237,12 +237,12 @@ def test_should_abort_for_momentum_false_when_velocity_holds():
     assert should_abort_for_momentum(state) is False
 ```
 
-- [ ] **Step 2: Run the new tests**
+- [x] **Step 2: Run the new tests**
 
 Run: `.venv/bin/pytest tests/test_momentum.py -v`
 Expected: `7 passed`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_momentum.py
@@ -260,7 +260,7 @@ git commit -m "Add unit tests for momentum.py"
 - Consumes: `snapshot_cvd_on_close(state: MarketState) -> None`, `detect_cvd_divergence(state: MarketState) -> Optional[str]`, `_averaged_bid_ask_volume(snapshots: List[BookSnapshot], depth: int = 10) -> Tuple[float, float]`, `get_book_imbalance(state: MarketState) -> Tuple[float, str]` from `order_flow.py`. `BookSnapshot`, `Candle`, `MarketState`, `OrderBookLevel` from `state.py`.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the full test file**
+- [x] **Step 1: Write the full test file**
 
 ```python
 import pytest
@@ -384,12 +384,12 @@ def test_get_book_imbalance_neutral_on_intermediate_ratio():
     assert direction == "neutral"
 ```
 
-- [ ] **Step 2: Run the new tests**
+- [x] **Step 2: Run the new tests**
 
 Run: `.venv/bin/pytest tests/test_order_flow.py -v`
 Expected: `11 passed`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_order_flow.py
@@ -407,7 +407,7 @@ git commit -m "Add unit tests for order_flow.py"
 - Consumes: `_is_breakout_candle(c: Candle, atr: float) -> bool`, `_is_tight_candle(c: Candle, atr: float) -> bool`, `_has_liquidity_sweeps_at_both_extremes(candles: deque, lookback: int = RANGE_SWEEP_LOOKBACK) -> bool`, `_ema_is_sloping(state: MarketState, atr: float) -> bool`, `_infer_candidate(state: MarketState) -> Regime`, `update_regime(state: MarketState) -> None`, `update_mtf_trend(state: MarketState) -> None` — all from `regime.py`. `Candle`, `MarketState`, `Regime`, `Side` from `state.py`. `REGIME_CONFIRM_CANDLES` from `config.py`.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the full test file**
+- [x] **Step 1: Write the full test file**
 
 ```python
 from collections import deque
@@ -682,12 +682,12 @@ def test_update_mtf_trend_5m_goes_short_below_dead_zone():
     assert state.trend_5m == Side.SHORT
 ```
 
-- [ ] **Step 2: Run the new tests**
+- [x] **Step 2: Run the new tests**
 
 Run: `.venv/bin/pytest tests/test_regime.py -v`
 Expected: `24 passed`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_regime.py
@@ -705,7 +705,7 @@ git commit -m "Add unit tests for regime.py"
 - Consumes: `update_squeeze(state: MarketState) -> None`, `check_entry_signal(state: MarketState) -> Optional[Side]` from `signals.py` (already imported in the file — `check_entry_signal` is, `update_squeeze` needs adding). `BookSnapshot`, `Candle`, `MarketState`, `OrderBookLevel`, `Position`, `Regime`, `Side` from `state.py`. `SQUEEZE_MIN_BARS` from `config.py`.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Update the imports at the top of the file**
+- [x] **Step 1: Update the imports at the top of the file**
 
 In `tests/test_signals.py`, replace:
 
@@ -723,7 +723,7 @@ from signals import check_entry_signal, update_squeeze
 from state import BookSnapshot, Candle, MarketState, OrderBookLevel, Position, Regime, Side
 ```
 
-- [ ] **Step 2: Append the new helper and test functions at the end of the file**
+- [x] **Step 2: Append the new helper and test functions at the end of the file**
 
 Add this after the existing `test_entry_signal_rejected_when_spread_exceeds_atr_threshold` function (keep the existing `_valid_long_setup_state` helper and its two tests untouched above this point):
 
@@ -913,12 +913,12 @@ def test_entry_signal_returns_direction_when_all_gates_pass():
     assert check_entry_signal(state) == Side.LONG
 ```
 
-- [ ] **Step 3: Run the full file**
+- [x] **Step 3: Run the full file**
 
 Run: `.venv/bin/pytest tests/test_signals.py -v`
 Expected: `19 passed` (2 pre-existing spread-filter tests + 17 new).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/test_signals.py
@@ -939,7 +939,7 @@ git commit -m "Add unit tests for update_squeeze and the remaining check_entry_s
 
 **Why fix first:** `context.py:76`'s `hasattr(self, '_use_state_attr')` is always `False` (that attribute is never set anywhere), so the `if` branch is dead and the `else` branch — `list(self.state.candles_15m)` — always runs. Replacing the whole expression with the `else` branch alone is a no-op for behavior, but removes a confusing line that shadows the module-level `state` import. `context.py:64-67`'s call to `yf.download(...)` is missing `multi_level_index=False`; with the installed `yfinance==1.4.1` + `pandas==3.0.3`, `yf.download` returns MultiIndex columns even for a single ticker, so `spy_data["Close"]` is a DataFrame (not a Series) and `.dropna().tolist()` raises `AttributeError: 'DataFrame' object has no attribute 'tolist'` — this was seen directly in this environment in a prior session (see `docs/superpowers/specs/2026-06-17-strategy-core-unit-tests-design.md` section 2.2). The unit tests in this task replace `yf.download` with a fake that already returns flat columns, so they exercise the function's logic correctly regardless of this kwarg — the fix matters for the real (unmocked) runtime call, not for these tests' pass/fail.
 
-- [ ] **Step 1: Fix the dead branch**
+- [x] **Step 1: Fix the dead branch**
 
 In `context.py`, replace:
 
@@ -953,7 +953,7 @@ with:
         btc_candles = list(self.state.candles_15m)
 ```
 
-- [ ] **Step 2: Fix the yfinance MultiIndex bug**
+- [x] **Step 2: Fix the yfinance MultiIndex bug**
 
 In `context.py`, replace:
 
@@ -978,19 +978,19 @@ with:
         )
 ```
 
-- [ ] **Step 3: Run the full existing suite to confirm no regression**
+- [x] **Step 3: Run the full existing suite to confirm no regression**
 
 Run: `.venv/bin/pytest -q`
 Expected: `36 passed` (unchanged baseline — these two fixes don't change any existing test's behavior).
 
-- [ ] **Step 4: Commit the fixes**
+- [x] **Step 4: Commit the fixes**
 
 ```bash
 git add context.py
 git commit -m "Fix dead branch and yfinance MultiIndex bug in context.py"
 ```
 
-- [ ] **Step 5: Write the full test file**
+- [x] **Step 5: Write the full test file**
 
 ```python
 import asyncio
@@ -1192,12 +1192,12 @@ def test_macro_filter_yfinance_unavailable_skips_without_raising_and_does_not_re
     assert called["hit"] is False
 ```
 
-- [ ] **Step 6: Run the new tests**
+- [x] **Step 6: Run the new tests**
 
 Run: `.venv/bin/pytest tests/test_context.py -v`
 Expected: `16 passed`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/test_context.py
@@ -1210,11 +1210,11 @@ git commit -m "Add unit tests for context.py"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the entire test suite**
+- [x] **Step 1: Run the entire test suite**
 
 Run: `.venv/bin/pytest -q`
 Expected: `120 passed` (36 baseline + 9 indicators + 7 momentum + 11 order_flow + 24 regime + 17 new signals + 16 context = 120).
 
-- [ ] **Step 2: If the count doesn't match, investigate before moving on**
+- [x] **Step 2: If the count doesn't match, investigate before moving on**
 
 Diff the actual `pytest -v` output against the expected test names listed in Tasks 1–6's "Step 2/6" blocks above to find which test is missing, duplicated, or unexpectedly failing — do not just re-run and hope.
