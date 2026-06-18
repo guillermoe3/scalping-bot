@@ -28,16 +28,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def run() -> None:
-    state = MarketState()
-    safety.load_into_state(state)
-
-    feed = DataFeed(state)
-    engine = ExecutionEngine(state)
-    macro = MacroFilter(state)
-
-    if not PAPER_MODE:
-        safety.reconcile_with_exchange(state, engine.exchange)
+def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
+    """Registers the strategy's event handlers against feed. feed can be
+    DataFeed (live) or BacktestFeed (backtest) — it only needs to expose
+    the same on_trade/on_candle_1m/on_candle_5m/on_candle_15m registration
+    interface (duck typing, no shared base class)."""
 
     # -------------------------------------------------------------------------
     # Tick handler — runs on every trade event (sub-second)
@@ -109,13 +104,24 @@ async def run() -> None:
             state.trend_15m.value if state.trend_15m else "?",
         )
 
-    # -------------------------------------------------------------------------
-    # Wire callbacks
-    # -------------------------------------------------------------------------
     feed.on_trade(on_trade)
     feed.on_candle_1m(on_candle_1m)
     feed.on_candle_5m(on_candle_5m)
     feed.on_candle_15m(on_candle_15m)
+
+
+async def run() -> None:
+    state = MarketState()
+    safety.load_into_state(state)
+
+    feed = DataFeed(state)
+    engine = ExecutionEngine(state)
+    macro = MacroFilter(state)
+
+    if not PAPER_MODE:
+        safety.reconcile_with_exchange(state, engine.exchange)
+
+    wire_strategy(state, feed, engine)
 
     mode = "PAPER" if os.getenv("PAPER_MODE", "true").lower() == "true" else "LIVE"
     logger.info("BTC Scalping Bot starting — mode=%s", mode)
