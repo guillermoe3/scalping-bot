@@ -1,6 +1,6 @@
 # Endurecimiento de Seguridad Operativa — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a daily kill switch, crash-safe state persistence with exchange reconciliation, realistic fees/slippage (fixing a TP1 accounting bug along the way), and a spread entry filter to the BTC scalping bot.
 
@@ -35,7 +35,7 @@
 **Interfaces:**
 - Produces: `MarketState.consecutive_losses: int`, `MarketState.kill_switch_active: bool`, `MarketState.last_reset_date: Optional[str]`, `Position.fees_paid: float`, `Position.realized_pnl: float`. Every later task's tests run via `.venv/bin/pytest`.
 
-- [ ] **Step 1: Create the venv and runtime install**
+- [x] **Step 1: Create the venv and runtime install**
 
 ```bash
 cd /home/guille/dev/scalping-bot
@@ -46,7 +46,7 @@ python3 -m venv .venv
 
 Expected: no errors; `.venv/bin/pip list` shows `websockets`, `ccxt`, `python-dotenv`, `yfinance`.
 
-- [ ] **Step 2: Add the dev requirements file and install it**
+- [x] **Step 2: Add the dev requirements file and install it**
 
 Create `requirements-dev.txt`:
 
@@ -60,14 +60,14 @@ pytest>=8.0.0
 
 Expected: pytest installs cleanly.
 
-- [ ] **Step 3: Add the root conftest.py**
+- [x] **Step 3: Add the root conftest.py**
 
 Create `conftest.py` (empty file — its presence at the repo root is what makes pytest's default "prepend" import mode add the repo root to `sys.path`):
 
 ```python
 ```
 
-- [ ] **Step 4: Write the failing test**
+- [x] **Step 4: Write the failing test**
 
 Create `tests/test_state.py`:
 
@@ -97,7 +97,7 @@ def test_position_defaults_include_fee_tracking_fields():
     assert pos.realized_pnl == 0.0
 ```
 
-- [ ] **Step 5: Run the test, verify it fails**
+- [x] **Step 5: Run the test, verify it fails**
 
 ```bash
 .venv/bin/pytest tests/test_state.py -v
@@ -105,7 +105,7 @@ def test_position_defaults_include_fee_tracking_fields():
 
 Expected: FAIL — `TypeError` or `AttributeError` complaining the fields don't exist yet.
 
-- [ ] **Step 6: Add the fields to state.py**
+- [x] **Step 6: Add the fields to state.py**
 
 In `state.py`, the `Position` dataclass currently ends with (around line 80-82):
 
@@ -146,7 +146,7 @@ Change it to:
     last_reset_date: Optional[str] = None
 ```
 
-- [ ] **Step 7: Run the test, verify it passes**
+- [x] **Step 7: Run the test, verify it passes**
 
 ```bash
 .venv/bin/pytest tests/test_state.py -v
@@ -154,7 +154,7 @@ Change it to:
 
 Expected: 2 passed.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add requirements-dev.txt conftest.py tests/test_state.py state.py
@@ -174,7 +174,7 @@ git commit -m "Add pytest tooling and safety fields to MarketState/Position"
 - Consumes: `MarketState.consecutive_losses/kill_switch_active/last_reset_date/pnl_today/trades_today/position` and `Position` (Task 1).
 - Produces: `safety.maybe_reset_daily(state: MarketState) -> None`, `safety.can_open_new_position(state: MarketState) -> bool`, `safety.after_trade_closed(state: MarketState, total_trade_net: float, balance: float) -> None`, `safety.save_state(state: MarketState) -> None`, `safety.load_into_state(state: MarketState) -> None`. Task 4 (`risk.py`) calls `after_trade_closed`. Task 7 (`main.py`) calls `can_open_new_position` and `load_into_state`.
 
-- [ ] **Step 1: Append new config constants**
+- [x] **Step 1: Append new config constants**
 
 In `config.py`, after the existing `# Buffer sizes` block at the end of the file, add:
 
@@ -188,7 +188,7 @@ KILL_SWITCH_CONSECUTIVE_LOSSES = 3      # 3 losing trades in a row halts new ent
 STATE_FILE_PATH = "safety_state.json"
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `tests/test_safety.py`:
 
@@ -357,7 +357,7 @@ def test_save_state_does_not_raise_when_write_fails(monkeypatch, tmp_path):
     safety.save_state(state)  # must not raise
 ```
 
-- [ ] **Step 3: Run the tests, verify they fail**
+- [x] **Step 3: Run the tests, verify they fail**
 
 ```bash
 .venv/bin/pytest tests/test_safety.py -v
@@ -365,7 +365,7 @@ def test_save_state_does_not_raise_when_write_fails(monkeypatch, tmp_path):
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'safety'`.
 
-- [ ] **Step 4: Implement safety.py**
+- [x] **Step 4: Implement safety.py**
 
 Create `safety.py`:
 
@@ -482,7 +482,7 @@ def load_into_state(state: MarketState) -> None:
 
 Note: `tests/test_safety.py` monkeypatches the module-level `safety.STATE_FILE_PATH` (not `config.STATE_FILE_PATH`) — this works because `save_state`/`load_into_state` reference the name imported into `safety`'s own namespace, so `monkeypatch.setattr(safety, "STATE_FILE_PATH", ...)` correctly redirects file I/O to a temp path during tests without touching the real `config.STATE_FILE_PATH`.
 
-- [ ] **Step 5: Run the tests, verify they pass**
+- [x] **Step 5: Run the tests, verify they pass**
 
 ```bash
 .venv/bin/pytest tests/test_safety.py -v
@@ -490,7 +490,7 @@ Note: `tests/test_safety.py` monkeypatches the module-level `safety.STATE_FILE_P
 
 Expected: 12 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add config.py safety.py tests/test_safety.py
@@ -509,7 +509,7 @@ git commit -m "Add daily kill switch and JSON state persistence"
 - Consumes: `Position`, `Side` from `state.py` (Task 1). Takes a plain `exchange` object with a ccxt-shaped `fetch_positions(symbols: list[str]) -> list[dict]` method — no concrete ccxt dependency, so tests use a fake.
 - Produces: `safety.reconcile_with_exchange(state: MarketState, exchange) -> None`. Task 7 (`main.py`) calls this when `not PAPER_MODE`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/test_safety.py`:
 
@@ -589,7 +589,7 @@ def test_reconcile_exits_on_exchange_query_failure():
         safety.reconcile_with_exchange(state, exchange)
 ```
 
-- [ ] **Step 2: Run the tests, verify they fail**
+- [x] **Step 2: Run the tests, verify they fail**
 
 ```bash
 .venv/bin/pytest tests/test_safety.py -v -k reconcile
@@ -597,7 +597,7 @@ def test_reconcile_exits_on_exchange_query_failure():
 
 Expected: FAIL — `AttributeError: module 'safety' has no attribute 'reconcile_with_exchange'`.
 
-- [ ] **Step 3: Implement reconcile_with_exchange**
+- [x] **Step 3: Implement reconcile_with_exchange**
 
 Append to `safety.py` (add `import sys` to the top imports alongside the existing `import json`):
 
@@ -648,7 +648,7 @@ def reconcile_with_exchange(state: MarketState, exchange) -> None:
     sys.exit(1)
 ```
 
-- [ ] **Step 4: Run the tests, verify they pass**
+- [x] **Step 4: Run the tests, verify they pass**
 
 ```bash
 .venv/bin/pytest tests/test_safety.py -v
@@ -656,7 +656,7 @@ def reconcile_with_exchange(state: MarketState, exchange) -> None:
 
 Expected: 17 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add safety.py tests/test_safety.py
@@ -676,7 +676,7 @@ git commit -m "Add exchange position reconciliation on startup"
 - Consumes: `safety.after_trade_closed(state, total_trade_net, balance)` (Task 2), `Position.fees_paid`/`realized_pnl` (Task 1).
 - Produces: `risk.open_position(state, side, price, balance=PAPER_BALANCE_USDT) -> None` (now deducts an entry fee), `risk.check_tp1(state) -> Optional[float]` (new, pure), `risk.apply_partial_close(state, close_size: float, fill_price: float) -> float` (new), `risk.close_position(state, price, reason) -> float` (now fee-aware, calls `safety.after_trade_closed`), `risk.manage_position(state) -> tuple[Optional[float], Optional[str]]` (return type changed from `Optional[str]`). Task 5 (`execution.py`) calls `check_tp1` (indirectly via `manage_position`), `apply_partial_close`, `close_position`, `open_position`.
 
-- [ ] **Step 1: Append the fee constant**
+- [x] **Step 1: Append the fee constant**
 
 In `config.py`, after the `STATE_FILE_PATH` line added in Task 2, add:
 
@@ -691,7 +691,7 @@ SPREAD_FILTER_ATR_PCT = 0.05  # block entries when spread > 5% of 1m ATR
 
 (`SPREAD_FILTER_ATR_PCT` is added here too since it's a one-line addition and avoids a third small edit to `config.py` in Task 6; Task 6 will use it but not redefine it.)
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `tests/test_risk.py`:
 
@@ -829,7 +829,7 @@ def test_manage_position_returns_tuple_of_tp1_size_and_exit_reason():
     assert reason == "stop_loss"
 ```
 
-- [ ] **Step 3: Run the tests, verify they fail**
+- [x] **Step 3: Run the tests, verify they fail**
 
 ```bash
 .venv/bin/pytest tests/test_risk.py -v
@@ -837,7 +837,7 @@ def test_manage_position_returns_tuple_of_tp1_size_and_exit_reason():
 
 Expected: FAIL — `ImportError: cannot import name 'check_tp1' from 'risk'` (and similar for `apply_partial_close`).
 
-- [ ] **Step 4: Modify risk.py**
+- [x] **Step 4: Modify risk.py**
 
 In `risk.py`, update the imports (currently lines 1-19) to add `TAKER_FEE_RATE` and the `safety` module:
 
@@ -1018,7 +1018,7 @@ def manage_position(state: MarketState) -> tuple[Optional[float], Optional[str]]
     return tp1_close_size, None
 ```
 
-- [ ] **Step 5: Run the tests, verify they pass**
+- [x] **Step 5: Run the tests, verify they pass**
 
 ```bash
 .venv/bin/pytest tests/test_risk.py -v
@@ -1026,7 +1026,7 @@ def manage_position(state: MarketState) -> tuple[Optional[float], Optional[str]]
 
 Expected: 7 passed.
 
-- [ ] **Step 6: Run the full suite to confirm nothing else broke**
+- [x] **Step 6: Run the full suite to confirm nothing else broke**
 
 ```bash
 .venv/bin/pytest -v
@@ -1034,7 +1034,7 @@ Expected: 7 passed.
 
 Expected: all tests passed (Tasks 1-4 combined).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add config.py risk.py tests/test_risk.py
@@ -1053,7 +1053,7 @@ git commit -m "Make risk.py fee-aware and fix the TP1 partial-close accounting b
 - Consumes: `risk.open_position`, `risk.apply_partial_close`, `risk.close_position`, `risk.manage_position` returning `tuple[Optional[float], Optional[str]]` (Task 4).
 - Produces: `ExecutionEngine.enter(side: Side) -> bool` (fills at ask/bid), `ExecutionEngine.exit(reason: str) -> float` (fills at bid/ask), `ExecutionEngine.partial_exit(close_size: float, reason: str) -> float` (new), `ExecutionEngine.monitor_and_exit() -> None` (updated), `ExecutionEngine.exchange` (new public property). Task 7 (`main.py`) uses `engine.exchange`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_execution.py`:
 
@@ -1152,7 +1152,7 @@ def test_exchange_property_exposes_underlying_client():
     assert engine.exchange == "fake-client"
 ```
 
-- [ ] **Step 2: Run the tests, verify they fail**
+- [x] **Step 2: Run the tests, verify they fail**
 
 ```bash
 .venv/bin/pytest tests/test_execution.py -v
@@ -1160,7 +1160,7 @@ def test_exchange_property_exposes_underlying_client():
 
 Expected: FAIL — entry price assertions fail (still using `last_price`), and `AttributeError: 'ExecutionEngine' object has no attribute 'partial_exit'` / no `exchange` property.
 
-- [ ] **Step 3: Modify execution.py**
+- [x] **Step 3: Modify execution.py**
 
 Update the imports (currently lines 1-13):
 
@@ -1278,7 +1278,7 @@ Replace `monitor_and_exit` (currently lines 91-97):
             await self.exit(reason)
 ```
 
-- [ ] **Step 4: Run the tests, verify they pass**
+- [x] **Step 4: Run the tests, verify they pass**
 
 ```bash
 .venv/bin/pytest tests/test_execution.py -v
@@ -1286,7 +1286,7 @@ Replace `monitor_and_exit` (currently lines 91-97):
 
 Expected: 6 passed.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 ```bash
 .venv/bin/pytest -v
@@ -1294,7 +1294,7 @@ Expected: 6 passed.
 
 Expected: all tests passed (Tasks 1-5 combined).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add execution.py tests/test_execution.py
@@ -1313,7 +1313,7 @@ git commit -m "Fill orders by crossing the spread and send real TP1 partial-clos
 - Consumes: `config.SPREAD_FILTER_ATR_PCT` (added in Task 4), `MarketState.spread`/`atr` (already existed).
 - Produces: updated `signals.check_entry_signal(state: MarketState) -> Optional[Side]` with one more rejection gate. No other task depends on this one.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_signals.py`:
 
@@ -1350,7 +1350,7 @@ def test_entry_signal_rejected_when_spread_exceeds_atr_threshold():
     assert check_entry_signal(state) is None
 ```
 
-- [ ] **Step 2: Run the tests, verify the first passes and confirm the gate doesn't exist yet**
+- [x] **Step 2: Run the tests, verify the first passes and confirm the gate doesn't exist yet**
 
 ```bash
 .venv/bin/pytest tests/test_signals.py -v
@@ -1358,7 +1358,7 @@ def test_entry_signal_rejected_when_spread_exceeds_atr_threshold():
 
 Expected: `test_entry_signal_allowed_when_spread_within_atr_threshold` PASSES (no spread gate yet, nothing blocks it), `test_entry_signal_rejected_when_spread_exceeds_atr_threshold` FAILS (still returns `Side.LONG` instead of `None`).
 
-- [ ] **Step 3: Modify signals.py**
+- [x] **Step 3: Modify signals.py**
 
 Update the imports (currently lines 1-10):
 
@@ -1393,7 +1393,7 @@ In `check_entry_signal`, right after the `direction is None` check and before th
     # Hard block: never trade against confirmed 15m trend
 ```
 
-- [ ] **Step 4: Run the tests, verify they pass**
+- [x] **Step 4: Run the tests, verify they pass**
 
 ```bash
 .venv/bin/pytest tests/test_signals.py -v
@@ -1401,7 +1401,7 @@ In `check_entry_signal`, right after the `direction is None` check and before th
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 ```bash
 .venv/bin/pytest -v
@@ -1409,7 +1409,7 @@ Expected: 2 passed.
 
 Expected: all tests passed (Tasks 1-6 combined).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add signals.py tests/test_signals.py
@@ -1427,7 +1427,7 @@ git commit -m "Add spread-vs-ATR entry filter"
 - Consumes: `safety.load_into_state`, `safety.can_open_new_position`, `safety.reconcile_with_exchange` (Tasks 2-3), `ExecutionEngine.exchange` (Task 5), `execution.PAPER_MODE` (already existed).
 - Produces: a fully wired `main.run()`. Nothing else depends on this — it's the integration point.
 
-- [ ] **Step 1: Modify main.py imports**
+- [x] **Step 1: Modify main.py imports**
 
 Current (lines 10-18):
 
@@ -1458,7 +1458,7 @@ from signals import check_entry_signal, update_squeeze
 from state import Candle, MarketState
 ```
 
-- [ ] **Step 2: Load persisted state and reconcile on startup**
+- [x] **Step 2: Load persisted state and reconcile on startup**
 
 Current start of `run()` (lines 30-36):
 
@@ -1485,7 +1485,7 @@ async def run() -> None:
         safety.reconcile_with_exchange(state, engine.exchange)
 ```
 
-- [ ] **Step 3: Gate new entries on the kill switch**
+- [x] **Step 3: Gate new entries on the kill switch**
 
 Current entry-signal check inside `on_candle_1m` (lines 70-74):
 
@@ -1507,7 +1507,7 @@ Change to:
                 await engine.enter(signal)
 ```
 
-- [ ] **Step 4: Verify main.py imports and runs cleanly in paper mode**
+- [x] **Step 4: Verify main.py imports and runs cleanly in paper mode**
 
 ```bash
 .venv/bin/python -c "import main"
@@ -1521,7 +1521,7 @@ timeout 10 .venv/bin/python main.py; echo "exit code: $?"
 
 Expected: logs show `BTC Scalping Bot starting — mode=PAPER` and `WebSocket connected to Binance`, then the process is killed by `timeout` after 10s (exit code 124) — that's expected, it just confirms the bot starts and connects without crashing. No real orders are placed; `PAPER_MODE` defaults to `true` when no `.env` is present.
 
-- [ ] **Step 5: Run the full test suite one last time**
+- [x] **Step 5: Run the full test suite one last time**
 
 ```bash
 .venv/bin/pytest -v
@@ -1529,7 +1529,7 @@ Expected: logs show `BTC Scalping Bot starting — mode=PAPER` and `WebSocket co
 
 Expected: all tests passed (Tasks 1-7 combined, no regressions).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add main.py
