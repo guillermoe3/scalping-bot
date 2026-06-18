@@ -4,9 +4,9 @@ import json
 import logging
 import sys
 from dataclasses import asdict
-from datetime import datetime, timezone
 from typing import Optional
 
+import clock
 from config import (
     KILL_SWITCH_CONSECUTIVE_LOSSES,
     KILL_SWITCH_DAILY_LOSS_PCT,
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _today_utc() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    return clock.today_utc()
 
 
 def maybe_reset_daily(state: MarketState) -> None:

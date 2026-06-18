@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-import time
 
+import clock
 from config import MOMENTUM_ABORT_MINUTES
 from state import MarketState
 
@@ -17,7 +17,7 @@ def update_volume_velocity(state: MarketState) -> None:
     live = state.live_1m
     if live is None:
         return
-    elapsed = (time.time() * 1000.0 - live.timestamp) / 1000.0
+    elapsed = (clock.now() * 1000.0 - live.timestamp) / 1000.0
     if elapsed > 0:
         state.volume_velocity = live.volume / elapsed
 
@@ -33,7 +33,7 @@ def should_abort_for_momentum(state: MarketState) -> bool:
     if pos is None:
         return False
 
-    held_seconds = time.time() - pos.entry_time
+    held_seconds = clock.now() - pos.entry_time
     if held_seconds < MOMENTUM_ABORT_MINUTES * 60:
         return False
 
