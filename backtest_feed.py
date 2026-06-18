@@ -64,18 +64,13 @@ def fetch_trades(exchange, symbol: str, start_ms: int, end_ms: int, use_cache: b
 
     trades: List[dict] = []
     since = start_ms
-    limit = 1000
     while since < end_ms:
-        batch = exchange.fetch_trades(symbol, since=since, limit=limit)
+        batch = exchange.fetch_trades(symbol, since=since, limit=1000)
         if not batch:
-            break
-        if batch[0]["timestamp"] >= end_ms:
             break
         trades.extend(batch)
         last_ts = batch[-1]["timestamp"]
         if last_ts <= since:
-            break
-        if last_ts + limit >= end_ms:
             break
         since = last_ts + 1
 

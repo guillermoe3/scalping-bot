@@ -85,7 +85,7 @@ def test_fetch_trades_paginates_across_multiple_calls():
     result = fetch_trades(exchange, "BTC/USDT", start_ms=0, end_ms=5000)
 
     assert result == trades
-    assert exchange.fetch_trades_calls == 3
+    assert exchange.fetch_trades_calls == 4
 
 
 def test_fetch_trades_caches_to_disk_and_skips_second_fetch():
@@ -95,7 +95,37 @@ def test_fetch_trades_caches_to_disk_and_skips_second_fetch():
     fetch_trades(exchange, "BTC/USDT", start_ms=0, end_ms=5000)
     fetch_trades(exchange, "BTC/USDT", start_ms=0, end_ms=5000)
 
-    assert exchange.fetch_trades_calls == 1
+    assert exchange.fetch_trades_calls == 2
+
+
+def test_fetch_trades_returns_all_trades_when_page_size_exceeds_end_ms():
+    """Regression test for the dimensionally-invalid `last_ts + limit >= end_ms` bug.
+
+    With high trade density and a small end_ms, the spurious break condition would
+    fire early, truncating results. This test uses a scenario where:
+    - end_ms - start_ms is small (1500 ms)
+    - page_size (limit) is large (1000)
+    - trades are densely packed (1 per millisecond)
+    - many trades are available beyond end_ms
+
+    The buggy code would return only 1000 trades (1 page) instead of all 1500
+    in-range trades, because last_ts + 1000 >= 1500 would fire after the first page.
+    """
+    # Create 2000 trades, 1 per millisecond from ts=0 to ts=1999
+    trades = [
+        {"timestamp": i, "price": 100.0 + i * 0.001, "amount": 1.0, "side": "buy"}
+        for i in range(2000)
+    ]
+    exchange = _FakeExchange(trades=trades, page_size=1000)
+
+    # Request trades in range [0, 1500), with limit=1000
+    # Should return exactly 1500 trades (timestamps 0-1499)
+    # Buggy code would return only 1000 (first page) because last_ts (999) + limit (1000) >= end_ms (1500)
+    result = fetch_trades(exchange, "BTC/USDT", start_ms=0, end_ms=1500)
+
+    assert len(result) == 1500, f"Expected 1500 trades, got {len(result)}"
+    assert result[0]["timestamp"] == 0
+    assert result[-1]["timestamp"] == 1499
 
 
 def test_write_cache_does_not_leave_a_partial_file_on_interrupted_write(monkeypatch):
