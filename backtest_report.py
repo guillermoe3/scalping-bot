@@ -20,7 +20,7 @@ def compute_summary(trade_records: List[dict]) -> dict:
 
     nets = [r["total_trade_net"] for r in closes]
     wins = [n for n in nets if n > 0]
-    losses = [n for n in nets if n <= 0]
+    losses = [n for n in nets if n <= 0]  # break-even (net == 0) counts as a loss
 
     win_rate = len(wins) / total_trades
     total_net_pnl = sum(nets)
