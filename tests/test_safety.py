@@ -3,6 +3,7 @@ import sys
 
 import pytest
 
+import clock
 import safety
 from state import MarketState, Position, Side
 
@@ -233,3 +234,9 @@ def test_reconcile_exits_on_exchange_query_failure():
 
     with pytest.raises(SystemExit):
         safety.reconcile_with_exchange(state, exchange)
+
+
+def test_today_utc_delegates_to_clock(monkeypatch):
+    monkeypatch.setattr(clock, "today_utc", lambda: "2030-01-01")
+
+    assert safety._today_utc() == "2030-01-01"

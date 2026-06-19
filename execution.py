@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import Callable, Optional
 
+import clock
 from risk import apply_partial_close, close_position, manage_position, open_position
 from state import MarketState, Side
 
@@ -25,9 +27,10 @@ class ExecutionEngine:
     of mode. In live mode, the in-process exit logic fires a market close order.
     """
 
-    def __init__(self, state: MarketState) -> None:
+    def __init__(self, state: MarketState, on_trade_closed: Optional[Callable[[dict], None]] = None) -> None:
         self.state = state
         self._exchange = None
+        self._on_trade_closed = on_trade_closed
         if not PAPER_MODE:
             self._init_exchange()
 
@@ -91,7 +94,18 @@ class ExecutionEngine:
             except Exception:
                 logger.exception("Live exit order failed")
 
-        return close_position(self.state, fill_price, reason)
+        side, entry_price, size, entry_time = pos.side, pos.entry_price, pos.size, pos.entry_time
+        net = close_position(self.state, fill_price, reason)
+
+        if self._on_trade_closed is not None:
+            self._on_trade_closed({
+                "side": side, "entry_price": entry_price, "exit_price": fill_price,
+                "size": size, "reason": reason, "leg_net": net,
+                "total_trade_net": pos.realized_pnl, "fees_paid": pos.fees_paid,
+                "entry_time": entry_time, "exit_time": clock.now(), "is_partial": False,
+            })
+
+        return net
 
     async def partial_exit(self, close_size: float, reason: str) -> float:
         pos = self.state.position
@@ -112,7 +126,18 @@ class ExecutionEngine:
             except Exception:
                 logger.exception("Live partial-exit order failed")
 
-        return apply_partial_close(self.state, close_size, fill_price)
+        side, entry_price, entry_time = pos.side, pos.entry_price, pos.entry_time
+        net = apply_partial_close(self.state, close_size, fill_price)
+
+        if self._on_trade_closed is not None:
+            self._on_trade_closed({
+                "side": side, "entry_price": entry_price, "exit_price": fill_price,
+                "size": close_size, "reason": reason, "leg_net": net,
+                "total_trade_net": None, "fees_paid": pos.fees_paid,
+                "entry_time": entry_time, "exit_time": clock.now(), "is_partial": True,
+            })
+
+        return net
 
     async def monitor_and_exit(self) -> None:
         """Called on every trade tick. Evaluates TP1 and all exit conditions."""

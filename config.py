@@ -74,3 +74,6 @@ TAKER_FEE_RATE = 0.0005   # 0.05% per side, Binance Futures USDT-M, no BNB disco
 
 # Spread filter
 SPREAD_FILTER_ATR_PCT = 0.05  # block entries when spread > 5% of 1m ATR
+
+# Backtesting
+BACKTEST_SYNTHETIC_SPREAD_PCT = 0.0001  # 0.01% of price per side — no real historical order book data exists

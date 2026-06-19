@@ -1,5 +1,6 @@
 import pytest
 
+import clock
 import safety
 from config import TAKER_FEE_RATE, TP1_CLOSE_PCT
 from risk import (
@@ -168,3 +169,28 @@ def test_manage_position_returns_tuple_of_tp1_size_and_exit_reason():
 
     assert tp1_close_size is None
     assert reason == "stop_loss"
+
+
+def test_open_position_uses_clock_for_entry_time(monkeypatch):
+    monkeypatch.setattr(clock, "now", lambda: 1700000000.0)
+    state = MarketState()
+    state.atr = 2.0
+    state.last_price = 100.0
+
+    open_position(state, Side.LONG, 100.0)
+
+    assert state.position.entry_time == 1700000000.0
+
+
+def test_manage_position_time_exit_uses_clock_for_held_minutes(monkeypatch):
+    from config import TIME_EXIT_MINUTES
+
+    monkeypatch.setattr(clock, "now", lambda: 1700000000.0)
+    state = _state_with_long_position(entry=100.0)
+    state.position.entry_time = 1700000000.0 - TIME_EXIT_MINUTES * 60 - 1
+    state.last_price = state.position.entry_price  # nowhere near SL/TP
+
+    from risk import manage_position
+    tp1_close_size, reason = manage_position(state)
+
+    assert reason == "time_exit"

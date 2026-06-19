@@ -6,3 +6,4 @@ venv/
 safety_state.json
 .claude/settings.local.json
 .worktrees/
+backtest_cache/

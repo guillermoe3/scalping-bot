@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Optional
 
+import clock
 import safety
 from config import (
     ACCOUNT_RISK_PCT,
@@ -63,7 +63,7 @@ def open_position(
         side=side,
         entry_price=price,
         size=size,
-        entry_time=time.time(),
+        entry_time=clock.now(),
         stop_loss=stop_loss,
         tp1=tp1,
         initial_atr=state.atr,
@@ -248,7 +248,7 @@ def manage_position(state: MarketState) -> tuple[Optional[float], Optional[str]]
 
     pos = state.position
     price = state.last_price
-    held_min = (time.time() - pos.entry_time) / 60.0
+    held_min = (clock.now() - pos.entry_time) / 60.0
 
     # Update stops (order matters: breakeven before trail)
     _apply_breakeven(state)
