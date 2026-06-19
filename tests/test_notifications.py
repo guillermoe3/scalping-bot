@@ -111,3 +111,90 @@ def test_notify_daily_summary_reports_kill_switch_activated():
 
     text = notifier._queue.get_nowait()
     assert "Kill switch: sí" in text
+
+
+import asyncio
+import contextlib
+
+
+def test_run_sends_queued_messages_in_fifo_order():
+    sent = []
+    notifier = TelegramNotifier("token", "chat", send_fn=sent.append)
+    notifier.notify_kill_switch(reason="racha de pérdidas", pnl_today=-10.0, consecutive_losses=1)
+    notifier.notify_daily_summary({
+        "date": "2026-06-19", "trades_today": 1, "pnl_today": -10.0,
+        "consecutive_losses": 1, "kill_switch_active": True,
+    })
+
+    async def _run_and_wait():
+        task = asyncio.create_task(notifier.run())
+        for _ in range(100):
+            if len(sent) >= 2:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_run_and_wait())
+
+    assert len(sent) == 2
+    assert sent[0].startswith("⚠️ KILL SWITCH")
+    assert sent[1].startswith("📊 Resumen")
+
+
+def test_run_continues_after_a_failed_send():
+    attempts = []
+
+    def _flaky_send(text):
+        attempts.append(text)
+        if len(attempts) == 1:
+            raise RuntimeError("network down")
+
+    notifier = TelegramNotifier("token", "chat", send_fn=_flaky_send)
+    notifier.notify_kill_switch(reason="racha de pérdidas", pnl_today=-10.0, consecutive_losses=1)
+    notifier.notify_kill_switch(reason="racha de pérdidas", pnl_today=-20.0, consecutive_losses=2)
+
+    async def _run_and_wait():
+        task = asyncio.create_task(notifier.run())
+        for _ in range(100):
+            if len(attempts) >= 2:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_run_and_wait())
+
+    assert len(attempts) == 2  # the failed first send did not block the second
+
+
+def test_send_via_http_posts_chat_id_and_text(monkeypatch):
+    import notifications as notifications_module
+
+    captured = {}
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    def _fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["data"] = request.data
+        return _FakeResponse()
+
+    monkeypatch.setattr(notifications_module.urllib.request, "urlopen", _fake_urlopen)
+    notifier = TelegramNotifier("tok123", "chat456")
+
+    notifier._send_via_http("hola")
+
+    assert captured["url"] == "https://api.telegram.org/bottok123/sendMessage"
+    assert b"chat_id=chat456" in captured["data"]
+    assert b"text=hola" in captured["data"]

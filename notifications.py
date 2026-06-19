@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import urllib.parse
+import urllib.request
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+_API_URL_TEMPLATE = "https://api.telegram.org/bot{token}/sendMessage"
 
 
 def _fmt_signed(amount: float) -> str:
@@ -26,7 +30,7 @@ class TelegramNotifier:
         self._bot_token = bot_token
         self._chat_id = chat_id
         self._enabled = bool(bot_token) and bool(chat_id)
-        self._send_fn = send_fn
+        self._send_fn = send_fn or self._send_via_http
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         if not self._enabled:
             logger.info(
@@ -77,3 +81,21 @@ class TelegramNotifier:
         if not self._enabled:
             return
         self._queue.put_nowait(text)
+
+    async def run(self) -> None:
+        """Background worker: drains the queue and sends messages one at a
+        time, in FIFO order. A failed send is logged and skipped — never
+        raises, never blocks the next queued message."""
+        while True:
+            text = await self._queue.get()
+            try:
+                await asyncio.to_thread(self._send_fn, text)
+            except Exception:
+                logger.warning("Failed to send Telegram notification", exc_info=True)
+
+    def _send_via_http(self, text: str) -> None:
+        url = _API_URL_TEMPLATE.format(token=self._bot_token)
+        data = urllib.parse.urlencode({"chat_id": self._chat_id, "text": text}).encode()
+        request = urllib.request.Request(url, data=data, method="POST")
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response.read()
