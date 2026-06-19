@@ -106,6 +106,15 @@ def test_can_open_new_position_true_by_default():
     assert safety.can_open_new_position(state) is True
 
 
+def test_can_open_new_position_threads_exchange_to_balance_resolution():
+    state = MarketState()
+    exchange = _FakeBalanceExchange(14230.55)
+
+    safety.can_open_new_position(state, exchange)
+
+    assert state.daily_starting_balance == pytest.approx(14230.55)
+
+
 def test_after_trade_closed_triggers_kill_switch_on_daily_loss_pct():
     state = MarketState()
     state.last_reset_date = safety._today_utc()

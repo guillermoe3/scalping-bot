@@ -53,8 +53,8 @@ def maybe_reset_daily(state: MarketState, exchange=None) -> None:
     save_state(state)
 
 
-def can_open_new_position(state: MarketState) -> bool:
-    maybe_reset_daily(state)
+def can_open_new_position(state: MarketState, exchange=None) -> bool:
+    maybe_reset_daily(state, exchange)
     return not state.kill_switch_active
 
 
