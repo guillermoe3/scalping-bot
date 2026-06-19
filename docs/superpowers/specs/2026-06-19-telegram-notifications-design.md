@@ -86,8 +86,8 @@ se llama con:
 **b) Cierre final — `execution.py`:** se reusa el `on_trade_closed` que ya
 existe (dispara en `exit()` y `partial_exit()` con el mismo dict de siempre,
 incluyendo `is_partial`). No se toca `execution.py` para esto — la decisión
-de "solo notificar el cierre final, no los parciales" vive en el wrapper de
-`main.py` (sección 3d), filtrando por `trade["is_partial"]`.
+de "solo notificar el cierre final, no los parciales" vive en
+`make_notification_handlers` (sección 3d), filtrando por `trade["is_partial"]`.
 
 **c) Resumen diario — `safety.py`:** nuevo parámetro
 `on_day_rolled_over: Optional[Callable[[dict], None]] = None` en
@@ -106,36 +106,37 @@ arranque del bot, donde no hay "día anterior" que resumir):
 **d) Kill switch — sin tocar `safety.py`/`risk.py`:** `after_trade_closed`
 (llamado internamente por `risk.close_position`/`apply_partial_close`, antes
 de que `execution.py` dispare `on_trade_closed`) ya deja `state.kill_switch_active`
-actualizado para el momento en que el `on_trade_closed` de `main.py` se
-ejecuta. El wrapper de `main.py` compara contra una variable local
-(`_kill_switch_notified`, reseteada a `False` en cada `on_day_rolled_over`)
-y manda el aviso la primera vez que ve la transición `False → True` en el
-día. Una vez activo, el kill switch se mantiene en `True` hasta que
-`maybe_reset_daily` lo resetea al otro día UTC — nunca vuelve a `False`
-dentro del mismo día — así que esta comparación simple no duplica avisos.
+actualizado para el momento en que el `on_trade_closed` se ejecuta.
+
+La lógica de "cuándo avisar" (filtrar parciales, debounce del kill switch)
+**no vive inline en `main.py`** — vive en una función nueva,
+`make_notification_handlers(notifier, state)` dentro de `notifications.py`,
+que devuelve el par `(on_trade_closed, on_day_rolled_over)` ya armado. Es un
+cambio de organización respecto a la primera versión de este diseño (que la
+ponía como closures sueltas en `main.py`): mismo comportamiento exacto, pero
+aislada en una función pura que se puede testear con un `TelegramNotifier`
+real y un `MarketState` de prueba, sin tocar el entrypoint async de
+`main.py: run()` (que no tiene tests, igual que hoy). `main.py` solo llama a
+la factory y cablea lo que devuelve — queda como wiring puro.
+
+`make_notification_handlers` compara contra una variable local cerrada por
+ambos closures (compartida vía una lista de 1 elemento, ya que Python no
+tiene `nonlocal` entre dos funciones hermanas sin un contenedor mutable) y
+manda el aviso de kill switch la primera vez que ve la transición
+`False → True` en el día; `on_day_rolled_over` la rearma a `False`. Una vez
+activo, el kill switch se mantiene en `True` hasta que `maybe_reset_daily` lo
+resetea al otro día UTC — nunca vuelve a `False` dentro del mismo día — así
+que esta comparación simple no duplica avisos.
 
 **Cableado en `main.py: run()`:**
 
 ```python
 notifier = TelegramNotifier(os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID"))
-kill_switch_notified = False
+on_trade_closed, on_day_rolled_over = make_notification_handlers(notifier, state)
 
-def _on_trade_closed(trade: dict) -> None:
-    nonlocal kill_switch_notified
-    if not trade["is_partial"]:
-        notifier.notify_trade_closed(trade)
-    if state.kill_switch_active and not kill_switch_notified:
-        notifier.notify_kill_switch(...)
-        kill_switch_notified = True
-
-def _on_day_rolled_over(summary: dict) -> None:
-    nonlocal kill_switch_notified
-    notifier.notify_daily_summary(summary)
-    kill_switch_notified = False
-
-engine = ExecutionEngine(state, on_trade_closed=_on_trade_closed, on_trade_opened=notifier.notify_trade_opened)
+engine = ExecutionEngine(state, on_trade_closed=on_trade_closed, on_trade_opened=notifier.notify_trade_opened)
 ...
-safety.maybe_reset_daily(state, engine.exchange, on_day_rolled_over=_on_day_rolled_over)
+safety.maybe_reset_daily(state, engine.exchange, on_day_rolled_over=on_day_rolled_over)
 ...
 await asyncio.gather(feed.connect(), macro.run(), notifier.run())
 ```
