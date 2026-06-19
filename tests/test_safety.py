@@ -155,6 +155,7 @@ def test_after_trade_closed_resets_streak_on_winning_trade():
 def test_save_then_load_round_trips_flat_state(_isolate_state_file):
     state = MarketState()
     state.last_reset_date = "2026-06-17"
+    state.daily_starting_balance = 12345.67
     state.pnl_today = -42.5
     state.trades_today = 3
     state.consecutive_losses = 1
@@ -166,10 +167,29 @@ def test_save_then_load_round_trips_flat_state(_isolate_state_file):
     safety.load_into_state(loaded)
 
     assert loaded.last_reset_date == "2026-06-17"
+    assert loaded.daily_starting_balance == pytest.approx(12345.67)
     assert loaded.pnl_today == pytest.approx(-42.5)
     assert loaded.trades_today == 3
     assert loaded.consecutive_losses == 1
     assert loaded.position is None
+
+
+def test_load_into_state_defaults_daily_starting_balance_when_key_missing(_isolate_state_file):
+    payload = {
+        "date_utc": "2026-06-17",
+        "pnl_today": 0.0,
+        "trades_today": 0,
+        "consecutive_losses": 0,
+        "kill_switch_active": False,
+        "position": None,
+    }
+    with open(safety.STATE_FILE_PATH, "w") as f:
+        json.dump(payload, f)
+
+    state = MarketState()
+    safety.load_into_state(state)
+
+    assert state.daily_starting_balance is None
 
 
 def test_save_then_load_round_trips_open_position(_isolate_state_file):

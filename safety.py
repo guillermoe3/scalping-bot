@@ -98,6 +98,7 @@ def _position_from_dict(data: Optional[dict]) -> Optional[Position]:
 def save_state(state: MarketState) -> None:
     payload = {
         "date_utc": state.last_reset_date,
+        "daily_starting_balance": state.daily_starting_balance,
         "pnl_today": state.pnl_today,
         "trades_today": state.trades_today,
         "consecutive_losses": state.consecutive_losses,
@@ -123,6 +124,7 @@ def load_into_state(state: MarketState) -> None:
 
     try:
         last_reset_date = payload.get("date_utc")
+        daily_starting_balance = payload.get("daily_starting_balance")
         pnl_today = payload.get("pnl_today", 0.0)
         trades_today = payload.get("trades_today", 0)
         consecutive_losses = payload.get("consecutive_losses", 0)
@@ -133,6 +135,7 @@ def load_into_state(state: MarketState) -> None:
         return
 
     state.last_reset_date = last_reset_date
+    state.daily_starting_balance = daily_starting_balance
     state.pnl_today = pnl_today
     state.trades_today = trades_today
     state.consecutive_losses = consecutive_losses
