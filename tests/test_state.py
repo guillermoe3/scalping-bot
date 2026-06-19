@@ -6,6 +6,7 @@ def test_market_state_defaults_include_safety_fields():
     assert state.consecutive_losses == 0
     assert state.kill_switch_active is False
     assert state.last_reset_date is None
+    assert state.daily_starting_balance is None
 
 
 def test_position_defaults_include_fee_tracking_fields():
