@@ -69,7 +69,7 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
         update_squeeze(state)
 
         # 7. Check for entry signal (only if flat and kill switch is not active)
-        if state.position is None and safety.can_open_new_position(state):
+        if state.position is None and safety.can_open_new_position(state, engine.exchange):
             signal = check_entry_signal(state)
             if signal is not None:
                 await engine.enter(signal)
@@ -120,6 +120,7 @@ async def run() -> None:
 
     if not PAPER_MODE:
         safety.reconcile_with_exchange(state, engine.exchange)
+    safety.maybe_reset_daily(state, engine.exchange)
 
     wire_strategy(state, feed, engine)
 

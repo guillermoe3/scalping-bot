@@ -2,9 +2,8 @@ import pytest
 
 import clock
 import safety
-from config import TAKER_FEE_RATE, TP1_CLOSE_PCT
+from config import ACCOUNT_RISK_PCT, INITIAL_SL_ATR, PAPER_BALANCE_USDT, TAKER_FEE_RATE, TP1_CLOSE_PCT
 from risk import (
-    PAPER_BALANCE_USDT,
     apply_partial_close,
     check_tp1,
     close_position,
@@ -120,7 +119,7 @@ def test_close_position_aggregates_realized_pnl_and_calls_kill_switch(monkeypatc
     calls = []
     monkeypatch.setattr(
         safety, "after_trade_closed",
-        lambda s, total_net, balance: calls.append((total_net, balance)),
+        lambda s, total_net: calls.append(total_net),
     )
 
     net = close_position(state, price=105.0, reason="time_exit")
@@ -133,8 +132,7 @@ def test_close_position_aggregates_realized_pnl_and_calls_kill_switch(monkeypatc
     assert net == pytest.approx(expected_net)
     assert state.position is None
     assert len(calls) == 1
-    assert calls[0][0] == pytest.approx(expected_total_trade_net)
-    assert calls[0][1] == PAPER_BALANCE_USDT
+    assert calls[0] == pytest.approx(expected_total_trade_net)
 
 
 def test_trade_with_tp1_then_breakeven_exit_uses_total_realized_pnl(monkeypatch):
@@ -149,7 +147,7 @@ def test_trade_with_tp1_then_breakeven_exit_uses_total_realized_pnl(monkeypatch)
     calls = []
     monkeypatch.setattr(
         safety, "after_trade_closed",
-        lambda s, total_net, balance: calls.append(total_net),
+        lambda s, total_net: calls.append(total_net),
     )
 
     final_net = close_position(state, price=100.0, reason="stop_loss")
@@ -194,3 +192,40 @@ def test_manage_position_time_exit_uses_clock_for_held_minutes(monkeypatch):
     tp1_close_size, reason = manage_position(state)
 
     assert reason == "time_exit"
+
+
+def test_open_position_sizes_against_daily_starting_balance():
+    state = MarketState()
+    state.atr = 2.0
+    state.daily_starting_balance = 50_000.0
+
+    open_position(state, Side.LONG, price=100.0)
+
+    sl_dist = INITIAL_SL_ATR * state.atr
+    expected_size = round((50_000.0 * ACCOUNT_RISK_PCT) / sl_dist, 6)
+    assert state.position.size == pytest.approx(expected_size)
+
+
+def test_open_position_falls_back_to_paper_balance_when_unset():
+    state = MarketState()
+    state.atr = 2.0
+    assert state.daily_starting_balance is None
+
+    open_position(state, Side.LONG, price=100.0)
+
+    sl_dist = INITIAL_SL_ATR * state.atr
+    expected_size = round((PAPER_BALANCE_USDT * ACCOUNT_RISK_PCT) / sl_dist, 6)
+    assert state.position.size == pytest.approx(expected_size)
+
+
+def test_open_position_uses_real_zero_balance_not_paper_fallback():
+    state = MarketState()
+    state.atr = 2.0
+    state.daily_starting_balance = 0.0
+
+    open_position(state, Side.LONG, price=100.0)
+
+    sl_dist = INITIAL_SL_ATR * state.atr
+    expected_size = round((0.0 * ACCOUNT_RISK_PCT) / sl_dist, 6)
+    assert expected_size == 0.0
+    assert state.position.size == pytest.approx(expected_size)

@@ -153,3 +153,4 @@ class MarketState:
     consecutive_losses: int = 0
     kill_switch_active: bool = False
     last_reset_date: Optional[str] = None
+    daily_starting_balance: Optional[float] = None

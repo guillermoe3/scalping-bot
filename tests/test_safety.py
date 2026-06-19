@@ -5,6 +5,7 @@ import pytest
 
 import clock
 import safety
+from config import KILL_SWITCH_DAILY_LOSS_PCT, PAPER_BALANCE_USDT
 from state import MarketState, Position, Side
 
 
@@ -35,16 +36,65 @@ def test_maybe_reset_daily_resets_counters_on_date_rollover():
 def test_maybe_reset_daily_is_a_noop_when_already_reset_today():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
     state.pnl_today = -50.0
 
     safety.maybe_reset_daily(state)
 
     assert state.pnl_today == -50.0
+    assert state.daily_starting_balance == 10_000.0
+
+
+def test_maybe_reset_daily_sets_paper_balance_when_no_exchange():
+    state = MarketState()
+
+    safety.maybe_reset_daily(state)
+
+    assert state.daily_starting_balance == PAPER_BALANCE_USDT
+
+
+def test_maybe_reset_daily_fetches_real_balance_from_exchange():
+    state = MarketState()
+    exchange = _FakeBalanceExchange(14230.55)
+
+    safety.maybe_reset_daily(state, exchange)
+
+    assert state.daily_starting_balance == pytest.approx(14230.55)
+
+
+def test_maybe_reset_daily_does_not_refetch_same_day():
+    state = MarketState()
+    exchange = _FakeBalanceExchange(14230.55)
+    safety.maybe_reset_daily(state, exchange)
+
+    safety.maybe_reset_daily(state, exchange)
+
+    assert exchange.fetch_balance_calls == 1
+
+
+def test_maybe_reset_daily_refetches_on_date_rollover():
+    state = MarketState()
+    state.last_reset_date = "2020-01-01"
+    state.daily_starting_balance = 999.0
+    exchange = _FakeBalanceExchange(14230.55)
+
+    safety.maybe_reset_daily(state, exchange)
+
+    assert state.daily_starting_balance == pytest.approx(14230.55)
+
+
+def test_maybe_reset_daily_exits_when_balance_fetch_fails():
+    state = MarketState()
+    exchange = _FailingBalanceExchange()
+
+    with pytest.raises(SystemExit):
+        safety.maybe_reset_daily(state, exchange)
 
 
 def test_can_open_new_position_false_when_kill_switch_active():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
     state.kill_switch_active = True
 
     assert safety.can_open_new_position(state) is False
@@ -56,12 +106,22 @@ def test_can_open_new_position_true_by_default():
     assert safety.can_open_new_position(state) is True
 
 
+def test_can_open_new_position_threads_exchange_to_balance_resolution():
+    state = MarketState()
+    exchange = _FakeBalanceExchange(14230.55)
+
+    safety.can_open_new_position(state, exchange)
+
+    assert state.daily_starting_balance == pytest.approx(14230.55)
+
+
 def test_after_trade_closed_triggers_kill_switch_on_daily_loss_pct():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
     state.pnl_today = -250.0  # -2.5% of a 10,000 balance
 
-    safety.after_trade_closed(state, total_trade_net=-250.0, balance=10_000.0)
+    safety.after_trade_closed(state, total_trade_net=-250.0)
 
     assert state.kill_switch_active is True
 
@@ -69,10 +129,11 @@ def test_after_trade_closed_triggers_kill_switch_on_daily_loss_pct():
 def test_after_trade_closed_triggers_kill_switch_on_consecutive_losses():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
 
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
 
     assert state.consecutive_losses == 3
     assert state.kill_switch_active is True
@@ -81,18 +142,37 @@ def test_after_trade_closed_triggers_kill_switch_on_consecutive_losses():
 def test_after_trade_closed_resets_streak_on_winning_trade():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
 
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=25.0, balance=10_000.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=25.0)
 
     assert state.consecutive_losses == 0
     assert state.kill_switch_active is False
 
 
+def test_after_trade_closed_uses_real_zero_balance_not_paper_fallback():
+    state = MarketState()
+    state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 0.0
+    # -$1 breaches a 0.0 balance threshold (any negative pnl breaches a 0
+    # threshold), but would NOT breach the threshold computed against
+    # PAPER_BALANCE_USDT (-2% of 10,000 == -$200). If the fallback wrongly
+    # substituted PAPER_BALANCE_USDT for the real 0.0 balance, the kill
+    # switch would stay inactive here.
+    state.pnl_today = -1.0
+    assert state.pnl_today > -KILL_SWITCH_DAILY_LOSS_PCT * PAPER_BALANCE_USDT
+
+    safety.after_trade_closed(state, total_trade_net=-1.0)
+
+    assert state.kill_switch_active is True
+
+
 def test_save_then_load_round_trips_flat_state(_isolate_state_file):
     state = MarketState()
     state.last_reset_date = "2026-06-17"
+    state.daily_starting_balance = 12345.67
     state.pnl_today = -42.5
     state.trades_today = 3
     state.consecutive_losses = 1
@@ -104,10 +184,29 @@ def test_save_then_load_round_trips_flat_state(_isolate_state_file):
     safety.load_into_state(loaded)
 
     assert loaded.last_reset_date == "2026-06-17"
+    assert loaded.daily_starting_balance == pytest.approx(12345.67)
     assert loaded.pnl_today == pytest.approx(-42.5)
     assert loaded.trades_today == 3
     assert loaded.consecutive_losses == 1
     assert loaded.position is None
+
+
+def test_load_into_state_defaults_daily_starting_balance_when_key_missing(_isolate_state_file):
+    payload = {
+        "date_utc": "2026-06-17",
+        "pnl_today": 0.0,
+        "trades_today": 0,
+        "consecutive_losses": 0,
+        "kill_switch_active": False,
+        "position": None,
+    }
+    with open(safety.STATE_FILE_PATH, "w") as f:
+        json.dump(payload, f)
+
+    state = MarketState()
+    safety.load_into_state(state)
+
+    assert state.daily_starting_balance is None
 
 
 def test_save_then_load_round_trips_open_position(_isolate_state_file):
@@ -175,6 +274,46 @@ class _FakeExchange:
 class _FailingExchange:
     def fetch_positions(self, symbols):
         raise RuntimeError("network down")
+
+
+class _FakeBalanceExchange:
+    def __init__(self, usdt_total):
+        self._usdt_total = usdt_total
+        self.fetch_balance_calls = 0
+
+    def fetch_balance(self):
+        self.fetch_balance_calls += 1
+        return {"total": {"USDT": self._usdt_total}}
+
+
+class _FailingBalanceExchange:
+    def fetch_balance(self):
+        raise RuntimeError("network down")
+
+
+class _MalformedBalanceExchange:
+    def fetch_balance(self):
+        return {"total": {}}  # no USDT key
+
+
+def test_fetch_real_balance_returns_usdt_total():
+    exchange = _FakeBalanceExchange(14230.55)
+
+    assert safety.fetch_real_balance(exchange) == pytest.approx(14230.55)
+
+
+def test_fetch_real_balance_exits_on_fetch_failure():
+    exchange = _FailingBalanceExchange()
+
+    with pytest.raises(SystemExit):
+        safety.fetch_real_balance(exchange)
+
+
+def test_fetch_real_balance_exits_when_usdt_key_missing():
+    exchange = _MalformedBalanceExchange()
+
+    with pytest.raises(SystemExit):
+        safety.fetch_real_balance(exchange)
 
 
 def test_reconcile_ok_when_both_sides_flat():

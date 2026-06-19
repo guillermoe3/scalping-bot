@@ -10,6 +10,7 @@ from config import (
     ATR_BREATHING_THRESHOLD,
     BREAKEVEN_ATR_TRIGGER,
     INITIAL_SL_ATR,
+    PAPER_BALANCE_USDT,
     TAKER_FEE_RATE,
     TIME_EXIT_MINUTES,
     TP1_CLOSE_PCT,
@@ -19,9 +20,6 @@ from indicators import detect_swing_points
 from state import MarketState, Position, Side
 
 logger = logging.getLogger(__name__)
-
-# Used in paper mode; replace with live account balance query for live trading
-PAPER_BALANCE_USDT = 10_000.0
 
 
 # --- Position sizing ---
@@ -52,8 +50,14 @@ def open_position(
     state: MarketState,
     side: Side,
     price: float,
-    balance: float = PAPER_BALANCE_USDT,
+    balance: Optional[float] = None,
 ) -> None:
+    if balance is None:
+        balance = (
+            state.daily_starting_balance
+            if state.daily_starting_balance is not None
+            else PAPER_BALANCE_USDT
+        )
     stop_loss, tp1 = _compute_levels(side, price, state.atr)
     size = _compute_size(price, stop_loss, balance)
     sl_dist = abs(price - stop_loss)
@@ -107,7 +111,7 @@ def close_position(state: MarketState, price: float, reason: str) -> float:
         pos.side.value.upper(), price, reason, net, total_trade_net, state.pnl_today,
     )
 
-    safety.after_trade_closed(state, total_trade_net, PAPER_BALANCE_USDT)
+    safety.after_trade_closed(state, total_trade_net)
     return net
 
 

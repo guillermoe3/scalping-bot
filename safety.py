@@ -10,6 +10,7 @@ import clock
 from config import (
     KILL_SWITCH_CONSECUTIVE_LOSSES,
     KILL_SWITCH_DAILY_LOSS_PCT,
+    PAPER_BALANCE_USDT,
     STATE_FILE_PATH,
 )
 from state import MarketState, Position, Side
@@ -17,15 +18,33 @@ from state import MarketState, Position, Side
 logger = logging.getLogger(__name__)
 
 
+def fetch_real_balance(exchange) -> float:
+    """Fetches the real USDT wallet balance from the exchange. Exits the
+    process rather than guessing when the fetch fails or the response is
+    malformed — same fail-closed criterion as reconcile_with_exchange."""
+    try:
+        balance = exchange.fetch_balance()
+        total = balance["total"]["USDT"]
+    except Exception:
+        logger.error("Could not fetch real account balance", exc_info=True)
+        sys.exit(1)
+    return float(total)
+
+
 def _today_utc() -> str:
     return clock.today_utc()
 
 
-def maybe_reset_daily(state: MarketState) -> None:
-    """Reset daily counters and the kill switch when the UTC date has rolled over."""
+def maybe_reset_daily(state: MarketState, exchange=None) -> None:
+    """Reset daily counters and the kill switch when the UTC date has rolled
+    over, and (re)resolve the daily starting balance used for position
+    sizing and the kill switch threshold."""
     today = _today_utc()
-    if state.last_reset_date == today:
+    if state.last_reset_date == today and state.daily_starting_balance is not None:
         return
+    state.daily_starting_balance = (
+        PAPER_BALANCE_USDT if exchange is None else fetch_real_balance(exchange)
+    )
     state.pnl_today = 0.0
     state.trades_today = 0
     state.consecutive_losses = 0
@@ -34,17 +53,22 @@ def maybe_reset_daily(state: MarketState) -> None:
     save_state(state)
 
 
-def can_open_new_position(state: MarketState) -> bool:
-    maybe_reset_daily(state)
+def can_open_new_position(state: MarketState, exchange=None) -> bool:
+    maybe_reset_daily(state, exchange)
     return not state.kill_switch_active
 
 
-def after_trade_closed(state: MarketState, total_trade_net: float, balance: float) -> None:
+def after_trade_closed(state: MarketState, total_trade_net: float) -> None:
     if total_trade_net < 0:
         state.consecutive_losses += 1
     else:
         state.consecutive_losses = 0
 
+    balance = (
+        state.daily_starting_balance
+        if state.daily_starting_balance is not None
+        else PAPER_BALANCE_USDT
+    )
     daily_loss_breached = state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance
     streak_breached = state.consecutive_losses >= KILL_SWITCH_CONSECUTIVE_LOSSES
 
@@ -78,6 +102,7 @@ def _position_from_dict(data: Optional[dict]) -> Optional[Position]:
 def save_state(state: MarketState) -> None:
     payload = {
         "date_utc": state.last_reset_date,
+        "daily_starting_balance": state.daily_starting_balance,
         "pnl_today": state.pnl_today,
         "trades_today": state.trades_today,
         "consecutive_losses": state.consecutive_losses,
@@ -103,6 +128,7 @@ def load_into_state(state: MarketState) -> None:
 
     try:
         last_reset_date = payload.get("date_utc")
+        daily_starting_balance = payload.get("daily_starting_balance")
         pnl_today = payload.get("pnl_today", 0.0)
         trades_today = payload.get("trades_today", 0)
         consecutive_losses = payload.get("consecutive_losses", 0)
@@ -113,6 +139,7 @@ def load_into_state(state: MarketState) -> None:
         return
 
     state.last_reset_date = last_reset_date
+    state.daily_starting_balance = daily_starting_balance
     state.pnl_today = pnl_today
     state.trades_today = trades_today
     state.consecutive_losses = consecutive_losses

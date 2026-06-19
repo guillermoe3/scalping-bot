@@ -43,6 +43,7 @@ TP1_RR = 2.0                  # first target at 2R
 TP1_CLOSE_PCT = 0.5           # close 50% of position at TP1
 BREAKEVEN_ATR_TRIGGER = 0.8   # move stop to breakeven after 0.8 ATR profit
 ATR_BREATHING_THRESHOLD = 1.2 # expand SL if live ATR grows 20%+ vs entry ATR
+PAPER_BALANCE_USDT = 10_000.0  # paper-mode balance; LIVE mode overrides this daily (see safety.py)
 
 # Time-based exits
 TIME_EXIT_MINUTES = 15
