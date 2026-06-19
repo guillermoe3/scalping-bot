@@ -5,7 +5,7 @@ import pytest
 
 import clock
 import safety
-from config import PAPER_BALANCE_USDT
+from config import KILL_SWITCH_DAILY_LOSS_PCT, PAPER_BALANCE_USDT
 from state import MarketState, Position, Side
 
 
@@ -150,6 +150,23 @@ def test_after_trade_closed_resets_streak_on_winning_trade():
 
     assert state.consecutive_losses == 0
     assert state.kill_switch_active is False
+
+
+def test_after_trade_closed_uses_real_zero_balance_not_paper_fallback():
+    state = MarketState()
+    state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 0.0
+    # -$1 breaches a 0.0 balance threshold (any negative pnl breaches a 0
+    # threshold), but would NOT breach the threshold computed against
+    # PAPER_BALANCE_USDT (-2% of 10,000 == -$200). If the fallback wrongly
+    # substituted PAPER_BALANCE_USDT for the real 0.0 balance, the kill
+    # switch would stay inactive here.
+    state.pnl_today = -1.0
+    assert state.pnl_today > -KILL_SWITCH_DAILY_LOSS_PCT * PAPER_BALANCE_USDT
+
+    safety.after_trade_closed(state, total_trade_net=-1.0)
+
+    assert state.kill_switch_active is True
 
 
 def test_save_then_load_round_trips_flat_state(_isolate_state_file):

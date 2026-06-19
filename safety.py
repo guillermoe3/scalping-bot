@@ -64,7 +64,11 @@ def after_trade_closed(state: MarketState, total_trade_net: float) -> None:
     else:
         state.consecutive_losses = 0
 
-    balance = state.daily_starting_balance or PAPER_BALANCE_USDT
+    balance = (
+        state.daily_starting_balance
+        if state.daily_starting_balance is not None
+        else PAPER_BALANCE_USDT
+    )
     daily_loss_breached = state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance
     streak_breached = state.consecutive_losses >= KILL_SWITCH_CONSECUTIVE_LOSSES
 

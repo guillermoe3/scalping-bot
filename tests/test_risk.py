@@ -216,3 +216,16 @@ def test_open_position_falls_back_to_paper_balance_when_unset():
     sl_dist = INITIAL_SL_ATR * state.atr
     expected_size = round((PAPER_BALANCE_USDT * ACCOUNT_RISK_PCT) / sl_dist, 6)
     assert state.position.size == pytest.approx(expected_size)
+
+
+def test_open_position_uses_real_zero_balance_not_paper_fallback():
+    state = MarketState()
+    state.atr = 2.0
+    state.daily_starting_balance = 0.0
+
+    open_position(state, Side.LONG, price=100.0)
+
+    sl_dist = INITIAL_SL_ATR * state.atr
+    expected_size = round((0.0 * ACCOUNT_RISK_PCT) / sl_dist, 6)
+    assert expected_size == 0.0
+    assert state.position.size == pytest.approx(expected_size)
