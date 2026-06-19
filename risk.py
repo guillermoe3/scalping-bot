@@ -10,6 +10,7 @@ from config import (
     ATR_BREATHING_THRESHOLD,
     BREAKEVEN_ATR_TRIGGER,
     INITIAL_SL_ATR,
+    PAPER_BALANCE_USDT,
     TAKER_FEE_RATE,
     TIME_EXIT_MINUTES,
     TP1_CLOSE_PCT,
@@ -19,9 +20,6 @@ from indicators import detect_swing_points
 from state import MarketState, Position, Side
 
 logger = logging.getLogger(__name__)
-
-# Used in paper mode; replace with live account balance query for live trading
-PAPER_BALANCE_USDT = 10_000.0
 
 
 # --- Position sizing ---
