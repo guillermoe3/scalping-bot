@@ -10,8 +10,26 @@ from data_feed import update_live_candles
 from state import Candle, MarketState
 
 CACHE_DIR = "backtest_cache"
+DAY_MS = 24 * 60 * 60 * 1000
 
 _Handler = Callable[..., Awaitable[None]]
+
+
+def _day_chunks(start_ms: int, end_ms: int) -> List[tuple]:
+    """Splits [start_ms, end_ms) into UTC-midnight-aligned sub-ranges.
+
+    Each chunk is fetched and replayed independently so peak memory is
+    bounded to one day's worth of trades regardless of the overall
+    backtest length — a week of BTC/USDT trade ticks loaded as a single
+    list is enough to exhaust RAM on a small VM."""
+    chunks: List[tuple] = []
+    cursor = start_ms
+    while cursor < end_ms:
+        next_boundary = ((cursor // DAY_MS) + 1) * DAY_MS
+        chunk_end = min(next_boundary, end_ms)
+        chunks.append((cursor, chunk_end))
+        cursor = chunk_end
+    return chunks
 
 
 def _cache_path(symbol: str, kind: str, start_ms: int, end_ms: int) -> str:
@@ -175,6 +193,10 @@ class BacktestFeed:
         self._candle_15m_handlers.append(fn)
 
     async def replay(self, start_ms: int, end_ms: int) -> None:
+        for chunk_start, chunk_end in _day_chunks(start_ms, end_ms):
+            await self._replay_chunk(chunk_start, chunk_end)
+
+    async def _replay_chunk(self, start_ms: int, end_ms: int) -> None:
         klines_1m = fetch_klines_1m(self._exchange, "BTC/USDT", start_ms, end_ms, self._use_cache)
         if not klines_1m:
             raise ValueError(f"No historical data available for BTC/USDT between {start_ms} and {end_ms}")

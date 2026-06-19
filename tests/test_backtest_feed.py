@@ -330,6 +330,94 @@ def test_replay_resets_live_1m_after_each_candle_close():
     assert len(state.candles_1m) == 2
 
 
+def test_day_chunks_splits_a_multi_day_range_at_utc_midnight():
+    day_ms = 24 * 60 * 60 * 1000
+
+    result = backtest_feed._day_chunks(0, 2 * day_ms)
+
+    assert result == [(0, day_ms), (day_ms, 2 * day_ms)]
+
+
+def test_day_chunks_returns_a_single_chunk_when_range_is_within_one_day():
+    result = backtest_feed._day_chunks(0, 60_000)
+
+    assert result == [(0, 60_000)]
+
+
+def test_day_chunks_aligns_boundaries_to_utc_midnight_even_with_an_off_grid_start():
+    day_ms = 24 * 60 * 60 * 1000
+    half_day = day_ms // 2
+
+    result = backtest_feed._day_chunks(half_day, day_ms + half_day)
+
+    assert result == [(half_day, day_ms), (day_ms, day_ms + half_day)]
+
+
+def test_replay_caches_each_day_separately_for_multi_day_ranges():
+    day_ms = backtest_feed.DAY_MS
+    klines_1m = [
+        [0, 100.0, 100.0, 100.0, 100.0, 1.0],
+        [day_ms, 200.0, 200.0, 200.0, 200.0, 1.0],
+    ]
+    trades = [
+        {"timestamp": 10_000, "price": 100.0, "amount": 1.0, "side": "buy"},
+        {"timestamp": day_ms + 10_000, "price": 200.0, "amount": 1.0, "side": "sell"},
+    ]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=True)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=2 * day_ms))
+
+    day0_trades_path = backtest_feed._cache_path("BTC/USDT", "trades", 0, day_ms)
+    day1_trades_path = backtest_feed._cache_path("BTC/USDT", "trades", day_ms, 2 * day_ms)
+    whole_range_path = backtest_feed._cache_path("BTC/USDT", "trades", 0, 2 * day_ms)
+
+    assert os.path.exists(day0_trades_path)
+    assert os.path.exists(day1_trades_path)
+    assert not os.path.exists(whole_range_path)
+    assert backtest_feed._read_cache(day0_trades_path) == [trades[0]]
+    assert backtest_feed._read_cache(day1_trades_path) == [trades[1]]
+
+
+def test_replay_preserves_chronological_order_and_candle_closes_across_a_day_boundary():
+    day_ms = backtest_feed.DAY_MS
+    klines_1m = [
+        [day_ms - 60_000, 100.0, 102.0, 99.0, 101.0, 2.0],  # last 1m candle of day 0
+        [day_ms, 101.0, 103.0, 100.0, 102.0, 3.0],  # first 1m candle of day 1
+    ]
+    trades = [
+        {"timestamp": day_ms - 50_000, "price": 100.5, "amount": 1.0, "side": "buy"},
+        {"timestamp": day_ms + 10_000, "price": 101.5, "amount": 1.0, "side": "buy"},
+    ]
+    exchange = _FakeExchange(klines=klines_1m, trades=trades)
+    state = MarketState()
+    feed = BacktestFeed(state, exchange=exchange, use_cache=False)
+
+    fired = []
+
+    async def on_trade(price, qty, is_sell, ts):
+        fired.append(("trade", price))
+
+    async def on_candle_1m(candle):
+        fired.append(("candle_1m", candle.close))
+
+    feed.on_trade(on_trade)
+    feed.on_candle_1m(on_candle_1m)
+    feed.on_candle_5m(_noop)
+    feed.on_candle_15m(_noop)
+
+    asyncio.run(feed.replay(start_ms=0, end_ms=2 * day_ms))
+
+    assert fired == [
+        ("trade", 100.5),
+        ("candle_1m", 101.0),
+        ("trade", 101.5),
+        ("candle_1m", 102.0),
+    ]
+    assert len(state.candles_1m) == 2
+
+
 def test_replay_raises_a_clear_error_when_no_klines_are_available():
     exchange = _FakeExchange(klines=[], trades=[])
     state = MarketState()
