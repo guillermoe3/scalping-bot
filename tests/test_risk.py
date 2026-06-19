@@ -2,9 +2,8 @@ import pytest
 
 import clock
 import safety
-from config import TAKER_FEE_RATE, TP1_CLOSE_PCT
+from config import ACCOUNT_RISK_PCT, INITIAL_SL_ATR, PAPER_BALANCE_USDT, TAKER_FEE_RATE, TP1_CLOSE_PCT
 from risk import (
-    PAPER_BALANCE_USDT,
     apply_partial_close,
     check_tp1,
     close_position,
@@ -193,3 +192,27 @@ def test_manage_position_time_exit_uses_clock_for_held_minutes(monkeypatch):
     tp1_close_size, reason = manage_position(state)
 
     assert reason == "time_exit"
+
+
+def test_open_position_sizes_against_daily_starting_balance():
+    state = MarketState()
+    state.atr = 2.0
+    state.daily_starting_balance = 50_000.0
+
+    open_position(state, Side.LONG, price=100.0)
+
+    sl_dist = INITIAL_SL_ATR * state.atr
+    expected_size = round((50_000.0 * ACCOUNT_RISK_PCT) / sl_dist, 6)
+    assert state.position.size == pytest.approx(expected_size)
+
+
+def test_open_position_falls_back_to_paper_balance_when_unset():
+    state = MarketState()
+    state.atr = 2.0
+    assert state.daily_starting_balance is None
+
+    open_position(state, Side.LONG, price=100.0)
+
+    sl_dist = INITIAL_SL_ATR * state.atr
+    expected_size = round((PAPER_BALANCE_USDT * ACCOUNT_RISK_PCT) / sl_dist, 6)
+    assert state.position.size == pytest.approx(expected_size)

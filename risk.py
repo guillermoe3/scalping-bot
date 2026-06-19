@@ -50,8 +50,10 @@ def open_position(
     state: MarketState,
     side: Side,
     price: float,
-    balance: float = PAPER_BALANCE_USDT,
+    balance: Optional[float] = None,
 ) -> None:
+    if balance is None:
+        balance = state.daily_starting_balance or PAPER_BALANCE_USDT
     stop_loss, tp1 = _compute_levels(side, price, state.atr)
     size = _compute_size(price, stop_loss, balance)
     sl_dist = abs(price - stop_loss)
