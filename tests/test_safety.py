@@ -5,6 +5,7 @@ import pytest
 
 import clock
 import safety
+from config import PAPER_BALANCE_USDT
 from state import MarketState, Position, Side
 
 
@@ -35,16 +36,65 @@ def test_maybe_reset_daily_resets_counters_on_date_rollover():
 def test_maybe_reset_daily_is_a_noop_when_already_reset_today():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
     state.pnl_today = -50.0
 
     safety.maybe_reset_daily(state)
 
     assert state.pnl_today == -50.0
+    assert state.daily_starting_balance == 10_000.0
+
+
+def test_maybe_reset_daily_sets_paper_balance_when_no_exchange():
+    state = MarketState()
+
+    safety.maybe_reset_daily(state)
+
+    assert state.daily_starting_balance == PAPER_BALANCE_USDT
+
+
+def test_maybe_reset_daily_fetches_real_balance_from_exchange():
+    state = MarketState()
+    exchange = _FakeBalanceExchange(14230.55)
+
+    safety.maybe_reset_daily(state, exchange)
+
+    assert state.daily_starting_balance == pytest.approx(14230.55)
+
+
+def test_maybe_reset_daily_does_not_refetch_same_day():
+    state = MarketState()
+    exchange = _FakeBalanceExchange(14230.55)
+    safety.maybe_reset_daily(state, exchange)
+
+    safety.maybe_reset_daily(state, exchange)
+
+    assert exchange.fetch_balance_calls == 1
+
+
+def test_maybe_reset_daily_refetches_on_date_rollover():
+    state = MarketState()
+    state.last_reset_date = "2020-01-01"
+    state.daily_starting_balance = 999.0
+    exchange = _FakeBalanceExchange(14230.55)
+
+    safety.maybe_reset_daily(state, exchange)
+
+    assert state.daily_starting_balance == pytest.approx(14230.55)
+
+
+def test_maybe_reset_daily_exits_when_balance_fetch_fails():
+    state = MarketState()
+    exchange = _FailingBalanceExchange()
+
+    with pytest.raises(SystemExit):
+        safety.maybe_reset_daily(state, exchange)
 
 
 def test_can_open_new_position_false_when_kill_switch_active():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
     state.kill_switch_active = True
 
     assert safety.can_open_new_position(state) is False

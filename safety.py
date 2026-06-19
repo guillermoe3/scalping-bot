@@ -10,6 +10,7 @@ import clock
 from config import (
     KILL_SWITCH_CONSECUTIVE_LOSSES,
     KILL_SWITCH_DAILY_LOSS_PCT,
+    PAPER_BALANCE_USDT,
     STATE_FILE_PATH,
 )
 from state import MarketState, Position, Side
@@ -34,11 +35,16 @@ def _today_utc() -> str:
     return clock.today_utc()
 
 
-def maybe_reset_daily(state: MarketState) -> None:
-    """Reset daily counters and the kill switch when the UTC date has rolled over."""
+def maybe_reset_daily(state: MarketState, exchange=None) -> None:
+    """Reset daily counters and the kill switch when the UTC date has rolled
+    over, and (re)resolve the daily starting balance used for position
+    sizing and the kill switch threshold."""
     today = _today_utc()
-    if state.last_reset_date == today:
+    if state.last_reset_date == today and state.daily_starting_balance is not None:
         return
+    state.daily_starting_balance = (
+        PAPER_BALANCE_USDT if exchange is None else fetch_real_balance(exchange)
+    )
     state.pnl_today = 0.0
     state.trades_today = 0
     state.consecutive_losses = 0
