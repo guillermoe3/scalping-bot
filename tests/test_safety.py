@@ -177,6 +177,46 @@ class _FailingExchange:
         raise RuntimeError("network down")
 
 
+class _FakeBalanceExchange:
+    def __init__(self, usdt_total):
+        self._usdt_total = usdt_total
+        self.fetch_balance_calls = 0
+
+    def fetch_balance(self):
+        self.fetch_balance_calls += 1
+        return {"total": {"USDT": self._usdt_total}}
+
+
+class _FailingBalanceExchange:
+    def fetch_balance(self):
+        raise RuntimeError("network down")
+
+
+class _MalformedBalanceExchange:
+    def fetch_balance(self):
+        return {"total": {}}  # no USDT key
+
+
+def test_fetch_real_balance_returns_usdt_total():
+    exchange = _FakeBalanceExchange(14230.55)
+
+    assert safety.fetch_real_balance(exchange) == pytest.approx(14230.55)
+
+
+def test_fetch_real_balance_exits_on_fetch_failure():
+    exchange = _FailingBalanceExchange()
+
+    with pytest.raises(SystemExit):
+        safety.fetch_real_balance(exchange)
+
+
+def test_fetch_real_balance_exits_when_usdt_key_missing():
+    exchange = _MalformedBalanceExchange()
+
+    with pytest.raises(SystemExit):
+        safety.fetch_real_balance(exchange)
+
+
 def test_reconcile_ok_when_both_sides_flat():
     state = MarketState()
     exchange = _FakeExchange([])

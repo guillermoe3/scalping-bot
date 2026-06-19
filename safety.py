@@ -17,6 +17,19 @@ from state import MarketState, Position, Side
 logger = logging.getLogger(__name__)
 
 
+def fetch_real_balance(exchange) -> float:
+    """Fetches the real USDT wallet balance from the exchange. Exits the
+    process rather than guessing when the fetch fails or the response is
+    malformed — same fail-closed criterion as reconcile_with_exchange."""
+    try:
+        balance = exchange.fetch_balance()
+        total = balance["total"]["USDT"]
+    except Exception:
+        logger.error("Could not fetch real account balance", exc_info=True)
+        sys.exit(1)
+    return float(total)
+
+
 def _today_utc() -> str:
     return clock.today_utc()
 
