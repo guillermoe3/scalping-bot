@@ -120,7 +120,7 @@ def test_close_position_aggregates_realized_pnl_and_calls_kill_switch(monkeypatc
     calls = []
     monkeypatch.setattr(
         safety, "after_trade_closed",
-        lambda s, total_net, balance: calls.append((total_net, balance)),
+        lambda s, total_net: calls.append(total_net),
     )
 
     net = close_position(state, price=105.0, reason="time_exit")
@@ -133,8 +133,7 @@ def test_close_position_aggregates_realized_pnl_and_calls_kill_switch(monkeypatc
     assert net == pytest.approx(expected_net)
     assert state.position is None
     assert len(calls) == 1
-    assert calls[0][0] == pytest.approx(expected_total_trade_net)
-    assert calls[0][1] == PAPER_BALANCE_USDT
+    assert calls[0] == pytest.approx(expected_total_trade_net)
 
 
 def test_trade_with_tp1_then_breakeven_exit_uses_total_realized_pnl(monkeypatch):
@@ -149,7 +148,7 @@ def test_trade_with_tp1_then_breakeven_exit_uses_total_realized_pnl(monkeypatch)
     calls = []
     monkeypatch.setattr(
         safety, "after_trade_closed",
-        lambda s, total_net, balance: calls.append(total_net),
+        lambda s, total_net: calls.append(total_net),
     )
 
     final_net = close_position(state, price=100.0, reason="stop_loss")

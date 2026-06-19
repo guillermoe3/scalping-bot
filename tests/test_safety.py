@@ -118,9 +118,10 @@ def test_can_open_new_position_threads_exchange_to_balance_resolution():
 def test_after_trade_closed_triggers_kill_switch_on_daily_loss_pct():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
     state.pnl_today = -250.0  # -2.5% of a 10,000 balance
 
-    safety.after_trade_closed(state, total_trade_net=-250.0, balance=10_000.0)
+    safety.after_trade_closed(state, total_trade_net=-250.0)
 
     assert state.kill_switch_active is True
 
@@ -128,10 +129,11 @@ def test_after_trade_closed_triggers_kill_switch_on_daily_loss_pct():
 def test_after_trade_closed_triggers_kill_switch_on_consecutive_losses():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
 
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
 
     assert state.consecutive_losses == 3
     assert state.kill_switch_active is True
@@ -140,10 +142,11 @@ def test_after_trade_closed_triggers_kill_switch_on_consecutive_losses():
 def test_after_trade_closed_resets_streak_on_winning_trade():
     state = MarketState()
     state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
 
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=-10.0, balance=10_000.0)
-    safety.after_trade_closed(state, total_trade_net=25.0, balance=10_000.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=-10.0)
+    safety.after_trade_closed(state, total_trade_net=25.0)
 
     assert state.consecutive_losses == 0
     assert state.kill_switch_active is False

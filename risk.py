@@ -105,7 +105,7 @@ def close_position(state: MarketState, price: float, reason: str) -> float:
         pos.side.value.upper(), price, reason, net, total_trade_net, state.pnl_today,
     )
 
-    safety.after_trade_closed(state, total_trade_net, PAPER_BALANCE_USDT)
+    safety.after_trade_closed(state, total_trade_net)
     return net
 
 

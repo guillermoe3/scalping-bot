@@ -58,12 +58,13 @@ def can_open_new_position(state: MarketState, exchange=None) -> bool:
     return not state.kill_switch_active
 
 
-def after_trade_closed(state: MarketState, total_trade_net: float, balance: float) -> None:
+def after_trade_closed(state: MarketState, total_trade_net: float) -> None:
     if total_trade_net < 0:
         state.consecutive_losses += 1
     else:
         state.consecutive_losses = 0
 
+    balance = state.daily_starting_balance or PAPER_BALANCE_USDT
     daily_loss_breached = state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance
     streak_breached = state.consecutive_losses >= KILL_SWITCH_CONSECUTIVE_LOSSES
 
