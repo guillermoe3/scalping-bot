@@ -27,10 +27,16 @@ class ExecutionEngine:
     of mode. In live mode, the in-process exit logic fires a market close order.
     """
 
-    def __init__(self, state: MarketState, on_trade_closed: Optional[Callable[[dict], None]] = None) -> None:
+    def __init__(
+        self,
+        state: MarketState,
+        on_trade_closed: Optional[Callable[[dict], None]] = None,
+        on_trade_opened: Optional[Callable[[dict], None]] = None,
+    ) -> None:
         self.state = state
         self._exchange = None
         self._on_trade_closed = on_trade_closed
+        self._on_trade_opened = on_trade_opened
         if not PAPER_MODE:
             self._init_exchange()
 
@@ -58,6 +64,13 @@ class ExecutionEngine:
 
         fill_price = self.state.last_ask if side == Side.LONG else self.state.last_bid
         open_position(self.state, side, fill_price)
+
+        opened = self.state.position
+        if self._on_trade_opened is not None and opened is not None:
+            self._on_trade_opened({
+                "side": opened.side, "entry_price": opened.entry_price,
+                "size": opened.size, "stop_loss": opened.stop_loss, "tp1": opened.tp1,
+            })
 
         if PAPER_MODE or self._exchange is None:
             return True

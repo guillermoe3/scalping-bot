@@ -144,3 +144,37 @@ def test_on_trade_closed_defaults_to_none_and_does_not_raise():
     asyncio.run(engine.enter(Side.LONG))
 
     asyncio.run(engine.exit("time_exit"))  # must not raise
+
+
+def test_enter_calls_on_trade_opened_hook_with_position_details():
+    state = _state_with_book(bid=99.0, ask=101.0)
+    captured = []
+    engine = ExecutionEngine(state, on_trade_opened=captured.append)
+
+    asyncio.run(engine.enter(Side.LONG))
+
+    assert len(captured) == 1
+    record = captured[0]
+    assert record["side"] == Side.LONG
+    assert record["entry_price"] == pytest.approx(101.0)
+    assert record["size"] == pytest.approx(state.position.size)
+    assert record["stop_loss"] == pytest.approx(state.position.stop_loss)
+    assert record["tp1"] == pytest.approx(state.position.tp1)
+
+
+def test_on_trade_opened_defaults_to_none_and_does_not_raise():
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine = ExecutionEngine(state)  # no on_trade_opened passed
+
+    asyncio.run(engine.enter(Side.LONG))  # must not raise
+
+
+def test_enter_does_not_call_on_trade_opened_when_book_not_yet_received():
+    state = MarketState()  # last_bid/last_ask default to 0.0
+    state.last_price = 100.0
+    captured = []
+    engine = ExecutionEngine(state, on_trade_opened=captured.append)
+
+    asyncio.run(engine.enter(Side.LONG))
+
+    assert captured == []
