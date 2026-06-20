@@ -269,6 +269,21 @@ def test_on_trade_closed_fires_kill_switch_alert_with_streak_reason_when_balance
     assert "Motivo: racha de pérdidas" in second
 
 
+def test_on_trade_closed_fires_kill_switch_alert_with_daily_loss_reason_when_balance_unset():
+    state = MarketState()  # daily_starting_balance stays None
+    state.pnl_today = -250.0  # -2.5% of the PAPER_BALANCE_USDT (10,000) fallback, breaches -2%
+    state.consecutive_losses = 1  # below the streak threshold — isolates the daily-loss path
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, _ = make_notification_handlers(notifier, state)
+    state.kill_switch_active = True
+
+    on_trade_closed(_full_close_trade(net=-10.0))
+
+    notifier._queue.get_nowait()
+    second = notifier._queue.get_nowait()
+    assert "Motivo: pérdida diaria (-2.5%)" in second
+
+
 def test_on_trade_closed_only_fires_kill_switch_alert_once_on_transition():
     state = MarketState()
     notifier = TelegramNotifier("token", "chat")

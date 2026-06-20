@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 from typing import Callable, Optional, Tuple
 
-from config import KILL_SWITCH_DAILY_LOSS_PCT
+from config import KILL_SWITCH_DAILY_LOSS_PCT, PAPER_BALANCE_USDT
 from state import MarketState
 
 logger = logging.getLogger(__name__)
@@ -108,9 +108,10 @@ def _kill_switch_reason(state: MarketState) -> str:
     """Re-derives why the kill switch tripped from already-available state —
     safety.after_trade_closed computes the same daily-loss/streak booleans
     internally but doesn't persist them, so this recomputes the daily-loss
-    side of that check; consecutive_losses is shown either way in the body."""
-    balance = state.daily_starting_balance
-    if balance and state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance:
+    side of that check, mirroring its PAPER_BALANCE_USDT fallback exactly;
+    consecutive_losses is shown either way in the body."""
+    balance = state.daily_starting_balance if state.daily_starting_balance is not None else PAPER_BALANCE_USDT
+    if state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance:
         pct = (state.pnl_today / balance) * 100
         return f"pérdida diaria ({pct:.1f}%)"
     return "racha de pérdidas"
