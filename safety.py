@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from dataclasses import asdict
-from typing import Optional
+from typing import Callable, Optional
 
 import clock
 from config import (
@@ -35,13 +35,34 @@ def _today_utc() -> str:
     return clock.today_utc()
 
 
-def maybe_reset_daily(state: MarketState, exchange=None) -> None:
+def maybe_reset_daily(
+    state: MarketState,
+    exchange=None,
+    on_day_rolled_over: Optional[Callable[[dict], None]] = None,
+) -> None:
     """Reset daily counters and the kill switch when the UTC date has rolled
     over, and (re)resolve the daily starting balance used for position
-    sizing and the kill switch threshold."""
+    sizing and the kill switch threshold. on_day_rolled_over, if given, is
+    called with the previous day's stats right before they're reset — it is
+    never called on the bot's very first-ever reset (no previous day to
+    summarize)."""
     today = _today_utc()
     if state.last_reset_date == today and state.daily_starting_balance is not None:
         return
+
+    if (
+        on_day_rolled_over is not None
+        and state.last_reset_date is not None
+        and state.last_reset_date != today
+    ):
+        on_day_rolled_over({
+            "date": state.last_reset_date,
+            "trades_today": state.trades_today,
+            "pnl_today": state.pnl_today,
+            "consecutive_losses": state.consecutive_losses,
+            "kill_switch_active": state.kill_switch_active,
+        })
+
     state.daily_starting_balance = (
         PAPER_BALANCE_USDT if exchange is None else fetch_real_balance(exchange)
     )

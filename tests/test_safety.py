@@ -379,3 +379,43 @@ def test_today_utc_delegates_to_clock(monkeypatch):
     monkeypatch.setattr(clock, "today_utc", lambda: "2030-01-01")
 
     assert safety._today_utc() == "2030-01-01"
+
+
+def test_maybe_reset_daily_calls_on_day_rolled_over_with_previous_day_stats():
+    state = MarketState()
+    state.last_reset_date = "2020-01-01"
+    state.pnl_today = -50.0
+    state.trades_today = 4
+    state.consecutive_losses = 2
+    state.kill_switch_active = True
+    captured = []
+
+    safety.maybe_reset_daily(state, on_day_rolled_over=captured.append)
+
+    assert len(captured) == 1
+    summary = captured[0]
+    assert summary["date"] == "2020-01-01"
+    assert summary["trades_today"] == 4
+    assert summary["pnl_today"] == pytest.approx(-50.0)
+    assert summary["consecutive_losses"] == 2
+    assert summary["kill_switch_active"] is True
+
+
+def test_maybe_reset_daily_does_not_call_on_day_rolled_over_on_first_ever_reset():
+    state = MarketState()  # last_reset_date is None — no previous day to summarize
+    captured = []
+
+    safety.maybe_reset_daily(state, on_day_rolled_over=captured.append)
+
+    assert captured == []
+
+
+def test_maybe_reset_daily_does_not_call_on_day_rolled_over_when_already_reset_today():
+    state = MarketState()
+    state.last_reset_date = safety._today_utc()
+    state.daily_starting_balance = 10_000.0
+    captured = []
+
+    safety.maybe_reset_daily(state, on_day_rolled_over=captured.append)
+
+    assert captured == []
