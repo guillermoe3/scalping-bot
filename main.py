@@ -15,6 +15,7 @@ from momentum import update_volume_velocity
 from order_flow import snapshot_cvd_on_close
 from regime import update_mtf_trend, update_regime
 import safety
+from notifications import TelegramNotifier, make_notification_handlers
 from signals import check_entry_signal, update_squeeze
 from state import Candle, MarketState
 
@@ -114,13 +115,18 @@ async def run() -> None:
     state = MarketState()
     safety.load_into_state(state)
 
+    notifier = TelegramNotifier(os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID"))
+    on_trade_closed, on_day_rolled_over = make_notification_handlers(notifier, state)
+
     feed = DataFeed(state)
-    engine = ExecutionEngine(state)
+    engine = ExecutionEngine(
+        state, on_trade_closed=on_trade_closed, on_trade_opened=notifier.notify_trade_opened,
+    )
     macro = MacroFilter(state)
 
     if not PAPER_MODE:
         safety.reconcile_with_exchange(state, engine.exchange)
-    safety.maybe_reset_daily(state, engine.exchange)
+    safety.maybe_reset_daily(state, engine.exchange, on_day_rolled_over=on_day_rolled_over)
 
     wire_strategy(state, feed, engine)
 
@@ -130,6 +136,7 @@ async def run() -> None:
     await asyncio.gather(
         feed.connect(),
         macro.run(),
+        notifier.run(),
     )
 
 
