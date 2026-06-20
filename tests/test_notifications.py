@@ -198,3 +198,108 @@ def test_send_via_http_posts_chat_id_and_text(monkeypatch):
     assert captured["url"] == "https://api.telegram.org/bottok123/sendMessage"
     assert b"chat_id=chat456" in captured["data"]
     assert b"text=hola" in captured["data"]
+
+
+from state import MarketState
+from notifications import make_notification_handlers
+
+
+def _full_close_trade(net: float) -> dict:
+    return {
+        "is_partial": False, "side": Side.LONG, "exit_price": 100.0,
+        "reason": "time_exit", "total_trade_net": net, "fees_paid": 0.1,
+    }
+
+
+def _partial_close_trade() -> dict:
+    return {
+        "is_partial": True, "side": Side.LONG, "exit_price": 100.0,
+        "reason": "tp1", "total_trade_net": None, "fees_paid": 0.1,
+    }
+
+
+def test_on_trade_closed_ignores_partial_closes():
+    state = MarketState()
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, _ = make_notification_handlers(notifier, state)
+
+    on_trade_closed(_partial_close_trade())
+
+    assert notifier._queue.empty()
+
+
+def test_on_trade_closed_notifies_full_closes():
+    state = MarketState()
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, _ = make_notification_handlers(notifier, state)
+
+    on_trade_closed(_full_close_trade(net=10.0))
+
+    assert notifier._queue.qsize() == 1
+
+
+def test_on_trade_closed_fires_kill_switch_alert_with_daily_loss_reason():
+    state = MarketState()
+    state.daily_starting_balance = 10_000.0
+    state.pnl_today = -250.0  # -2.5%, breaches the -2% daily-loss threshold
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, _ = make_notification_handlers(notifier, state)
+    state.kill_switch_active = True
+
+    on_trade_closed(_full_close_trade(net=-10.0))
+
+    assert notifier._queue.qsize() == 2  # trade-closed + kill-switch
+    notifier._queue.get_nowait()
+    second = notifier._queue.get_nowait()
+    assert second.startswith("⚠️ KILL SWITCH")
+    assert "Motivo: pérdida diaria (-2.5%)" in second
+
+
+def test_on_trade_closed_fires_kill_switch_alert_with_streak_reason_when_balance_unset():
+    state = MarketState()  # daily_starting_balance stays None — not a balance-driven trip
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, _ = make_notification_handlers(notifier, state)
+    state.kill_switch_active = True
+    state.consecutive_losses = 3
+
+    on_trade_closed(_full_close_trade(net=-10.0))
+
+    notifier._queue.get_nowait()
+    second = notifier._queue.get_nowait()
+    assert "Motivo: racha de pérdidas" in second
+
+
+def test_on_trade_closed_only_fires_kill_switch_alert_once_on_transition():
+    state = MarketState()
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, _ = make_notification_handlers(notifier, state)
+    state.kill_switch_active = True
+
+    on_trade_closed(_full_close_trade(net=-10.0))
+    assert notifier._queue.qsize() == 2  # trade-closed + kill-switch
+
+    notifier._queue.get_nowait()
+    notifier._queue.get_nowait()
+    on_trade_closed(_full_close_trade(net=-5.0))  # still active, already notified
+    assert notifier._queue.qsize() == 1  # only the trade-closed message this time
+
+
+def test_on_day_rolled_over_sends_summary_and_rearms_kill_switch_alert():
+    state = MarketState()
+    notifier = TelegramNotifier("token", "chat")
+    on_trade_closed, on_day_rolled_over = make_notification_handlers(notifier, state)
+    state.kill_switch_active = True
+    on_trade_closed(_full_close_trade(net=-10.0))  # fires the kill-switch alert once
+    while not notifier._queue.empty():
+        notifier._queue.get_nowait()
+
+    on_day_rolled_over({
+        "date": "2026-06-18", "trades_today": 1, "pnl_today": -10.0,
+        "consecutive_losses": 1, "kill_switch_active": True,
+    })
+    summary_msg = notifier._queue.get_nowait()
+    assert summary_msg.startswith("📊 Resumen")
+    assert notifier._queue.empty()
+
+    on_trade_closed(_full_close_trade(net=-5.0))  # kill switch still active next day
+    assert notifier._queue.qsize() == 2  # fires again — was re-armed by the rollover

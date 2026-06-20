@@ -4,7 +4,10 @@ import asyncio
 import logging
 import urllib.parse
 import urllib.request
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
+
+from config import KILL_SWITCH_DAILY_LOSS_PCT
+from state import MarketState
 
 logger = logging.getLogger(__name__)
 
@@ -99,3 +102,42 @@ class TelegramNotifier:
         request = urllib.request.Request(url, data=data, method="POST")
         with urllib.request.urlopen(request, timeout=10) as response:
             response.read()
+
+
+def _kill_switch_reason(state: MarketState) -> str:
+    """Re-derives why the kill switch tripped from already-available state —
+    safety.after_trade_closed computes the same daily-loss/streak booleans
+    internally but doesn't persist them, so this recomputes the daily-loss
+    side of that check; consecutive_losses is shown either way in the body."""
+    balance = state.daily_starting_balance
+    if balance and state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance:
+        pct = (state.pnl_today / balance) * 100
+        return f"pérdida diaria ({pct:.1f}%)"
+    return "racha de pérdidas"
+
+
+def make_notification_handlers(
+    notifier: TelegramNotifier, state: MarketState
+) -> Tuple[Callable[[dict], None], Callable[[dict], None]]:
+    """Returns (on_trade_closed, on_day_rolled_over) wired for main.py.
+
+    on_trade_closed notifies on full closes only (not TP1 partials) and
+    fires a one-shot kill-switch alert the first time it sees the switch
+    flip on during the day. on_day_rolled_over sends the daily summary and
+    re-arms the kill-switch alert for the new day."""
+    kill_switch_notified = [False]
+
+    def on_trade_closed(trade: dict) -> None:
+        if not trade["is_partial"]:
+            notifier.notify_trade_closed(trade)
+        if state.kill_switch_active and not kill_switch_notified[0]:
+            notifier.notify_kill_switch(
+                _kill_switch_reason(state), state.pnl_today, state.consecutive_losses,
+            )
+            kill_switch_notified[0] = True
+
+    def on_day_rolled_over(summary: dict) -> None:
+        notifier.notify_daily_summary(summary)
+        kill_switch_notified[0] = False
+
+    return on_trade_closed, on_day_rolled_over
