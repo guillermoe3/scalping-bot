@@ -1,13 +1,16 @@
 # BTC Scalping Bot
 
 An asyncio Python bot that trades BTC/USDT on Binance Futures using a discretionary-style
-price-action scalping strategy (regime detection, compression/breakout entries, multi-timeframe
-trend filters, order-flow confirmation, and ATR-based risk management). Includes a backtesting
+price-action scalping strategy (regime detection, compression/breakout entries, trend filters,
+order-flow confirmation, and ATR-based risk management). Includes a backtesting
 harness that replays real historical Binance data through the exact same strategy code used live.
 
 > **Disclaimer:** This is a research/educational project. Trading cryptocurrency carries
 > substantial risk of loss. Validate extensively in `PAPER_MODE` and via backtesting before
 > ever pointing this at real capital. Nothing here is financial advice.
+>
+> The signal clock is the 15m candle; this bot is an intraday swing system, not a sub-minute
+> scalper (see docs/revisiones/ for the cost analysis that motivated this).
 
 ## How the strategy works
 
@@ -21,16 +24,20 @@ harness that replays real historical Binance data through the exact same strateg
    against a recent swing high/low, signaling absorption before a breakout into that level.
 3. **Entry gating** (`signals.py: check_entry_signal`) — a trade only fires when *all* of these
    align: known regime, active squeeze with a defined direction, an acceptable spread, no
-   opposing 15m trend, no macro block (BTC/SPY correlation filter), breakout-direction agreement
-   when in a `BREAKOUT` regime, no CVD divergence against the trade, and no opposing order-book
-   imbalance.
+   opposing 1h-equivalent trend (EMA-80 on 15m closes), no macro block (BTC/SPY correlation
+   filter), breakout-direction agreement when in a `BREAKOUT` regime, no CVD divergence against
+   the trade, and no opposing order-book imbalance. Signals are evaluated on 15m candle closes
+   (the signal timeframe).
 4. **Risk management** (`risk.py`) — fixed-fractional sizing (0.5% account risk per trade),
    ATR-based stop loss and a 2R first target, 50% partial close at TP1, a breakeven stop after
    0.8 ATR of profit, ATR "breathing" stop expansion if volatility grows, a structural
-   swing-point trailing stop, a 15-minute time exit, and a momentum-collapse abort.
-5. **Execution** (`execution.py`) — paper mode simulates fills by crossing the live spread; live
-   mode routes market orders through `ccxt` to Binance Futures. Position management (stops,
-   targets, trailing) runs identically in both modes.
+   swing-point trailing stop, a 225-minute (15 bars of 15m) time exit, and a
+   momentum-collapse abort (45 minutes / 3 bars of 15m).
+5. **Execution** (`execution.py`) — entries rest as post-only limit orders at the touch
+   (maker fee); in paper/backtest they fill only when price trades through the limit, and
+   expire unfilled after a timeout. Exits (stop, target, time, momentum) cross the spread
+   as market orders (taker fee). Live mode routes the entry as a Binance Futures GTX
+   (post-only) order and polls for the fill.
 6. **Safety** (`safety.py`) — persists PnL/position state to disk, enforces a daily kill switch
    (halts new entries after a -2% daily loss or 3 consecutive losses until the next UTC day), and
    on startup reconciles the persisted position against what the exchange actually reports,
@@ -52,7 +59,7 @@ clock that backtests can fast-forward deterministically over simulated event tim
 | `state.py` | `MarketState`, `Position`, `Candle` and other shared dataclasses |
 | `data_feed.py` | Live Binance WebSocket feed (trades, klines, order book) |
 | `indicators.py` | ATR, regime-aware EMA, swing point detection |
-| `regime.py` | Regime state machine + multi-timeframe trend bias |
+| `regime.py` | Regime state machine + 1h-equivalent trend bias |
 | `signals.py` | Squeeze detection + entry signal gating |
 | `momentum.py` | Volume velocity tracking + momentum-collapse abort |
 | `order_flow.py` | CVD divergence + order book imbalance detection |
