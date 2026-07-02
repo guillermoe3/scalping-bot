@@ -117,23 +117,15 @@ def update_regime(state: MarketState) -> None:
         state.regime_confirm_count = 1
 
 
-# --- MTF trend bias ---
+# --- Higher-timeframe trend bias ---
 
-def update_mtf_trend(state: MarketState) -> None:
-    """Set 15m and 5m trend bias from EMA relationship to current price."""
+def update_trend_1h(state: MarketState) -> None:
+    """Set the 1h-equivalent trend bias from price vs the EMA-80-on-15m,
+    with a +-0.05% deadband to avoid flip-flopping at the EMA."""
     p = state.last_price
-    if p <= 0:
+    if p <= 0 or state.ema_1h <= 0:
         return
-
-    if state.ema_15m > 0:
-        if p > state.ema_15m * 1.0005:
-            state.trend_15m = Side.LONG
-        elif p < state.ema_15m * 0.9995:
-            state.trend_15m = Side.SHORT
-        # else: leave unchanged to avoid flip-flopping at the EMA
-
-    if state.ema_5m > 0:
-        if p > state.ema_5m * 1.0003:
-            state.trend_5m = Side.LONG
-        elif p < state.ema_5m * 0.9997:
-            state.trend_5m = Side.SHORT
+    if p > state.ema_1h * 1.0005:
+        state.trend_1h = Side.LONG
+    elif p < state.ema_1h * 0.9995:
+        state.trend_1h = Side.SHORT

@@ -7,13 +7,13 @@ import sys
 
 from dotenv import load_dotenv
 
-from context import MacroFilter, update_mtf_trends
+from context import MacroFilter
 from data_feed import DataFeed
 from execution import ExecutionEngine, PAPER_MODE
 from indicators import detect_swing_points, update_indicators
 from momentum import update_volume_velocity
 from order_flow import snapshot_cvd_on_close
-from regime import update_mtf_trend, update_regime
+from regime import update_regime, update_trend_1h
 import safety
 from notifications import TelegramNotifier, make_notification_handlers
 from signals import check_entry_signal, update_squeeze
@@ -61,9 +61,8 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
         # 3. Update regime state machine (hysteresis protected)
         update_regime(state)
 
-        # 4. Update MTF trend bias
-        update_mtf_trend(state)
-        update_mtf_trends(state)
+        # 4. Update higher-timeframe trend bias
+        update_trend_1h(state)
 
         # 5. Refresh structural swing points
         highs, lows = detect_swing_points(state.candles_15m)

@@ -70,7 +70,7 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
     Required conditions (all must pass):
       1. Regime is known (not UNKNOWN)
       2. Active Volman squeeze detected
-      3. Squeeze direction aligns with 15m MTF trend (or 15m trend is unknown)
+      3. Squeeze direction aligns with 1h trend bias (or 1h trend is unknown)
       4. No macro context block
       5. In BREAKOUT regime: squeeze must align with the breakout direction
       6. CVD does not show divergence against the planned trade
@@ -95,9 +95,9 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
         )
         return None
 
-    # Hard block: never trade against confirmed 15m trend
-    if state.trend_15m is not None and state.trend_15m != direction:
-        logger.debug("Signal rejected: 15m trend %s opposes %s", state.trend_15m, direction)
+    # Hard block: never trade against the confirmed higher-timeframe trend
+    if state.trend_1h is not None and state.trend_1h != direction:
+        logger.debug("Signal rejected: 1h trend %s opposes %s", state.trend_1h, direction)
         return None
 
     # Macro gates

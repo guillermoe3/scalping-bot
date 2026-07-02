@@ -7,8 +7,8 @@ from regime import (
     _infer_candidate,
     _is_breakout_candle,
     _is_tight_candle,
-    update_mtf_trend,
     update_regime,
+    update_trend_1h,
 )
 from state import Candle, MarketState, Regime, Side
 
@@ -204,67 +204,33 @@ def test_update_regime_unknown_candidate_never_mutates_state():
     assert state.regime_confirm_count == 2
 
 
-def test_update_mtf_trend_15m_goes_long_above_dead_zone():
+def test_trend_1h_long_when_price_above_ema_band():
     state = MarketState()
-    state.ema_15m = 100.0
-    state.trend_15m = None
-    state.last_price = 100.06
-
-    update_mtf_trend(state)
-
-    assert state.trend_15m == Side.LONG
+    state.ema_1h = 100.0
+    state.last_price = 100.1  # > 100 * 1.0005
+    update_trend_1h(state)
+    assert state.trend_1h == Side.LONG
 
 
-def test_update_mtf_trend_15m_unchanged_inside_dead_zone():
+def test_trend_1h_short_when_price_below_ema_band():
     state = MarketState()
-    state.ema_15m = 100.0
-    state.trend_15m = Side.LONG
+    state.ema_1h = 100.0
+    state.last_price = 99.9  # < 100 * 0.9995
+    update_trend_1h(state)
+    assert state.trend_1h == Side.SHORT
+
+
+def test_trend_1h_unchanged_inside_deadband():
+    state = MarketState()
+    state.ema_1h = 100.0
+    state.trend_1h = Side.LONG
+    state.last_price = 100.01  # inside +-0.05% deadband
+    update_trend_1h(state)
+    assert state.trend_1h == Side.LONG  # no flip-flop at the EMA
+
+
+def test_trend_1h_noop_without_ema():
+    state = MarketState()
     state.last_price = 100.0
-
-    update_mtf_trend(state)
-
-    assert state.trend_15m == Side.LONG
-
-
-def test_update_mtf_trend_15m_goes_short_below_dead_zone():
-    state = MarketState()
-    state.ema_15m = 100.0
-    state.trend_15m = None
-    state.last_price = 99.9
-
-    update_mtf_trend(state)
-
-    assert state.trend_15m == Side.SHORT
-
-
-def test_update_mtf_trend_5m_goes_long_above_dead_zone():
-    state = MarketState()
-    state.ema_5m = 100.0
-    state.trend_5m = None
-    state.last_price = 100.04
-
-    update_mtf_trend(state)
-
-    assert state.trend_5m == Side.LONG
-
-
-def test_update_mtf_trend_5m_unchanged_inside_dead_zone():
-    state = MarketState()
-    state.ema_5m = 100.0
-    state.trend_5m = Side.SHORT
-    state.last_price = 100.0
-
-    update_mtf_trend(state)
-
-    assert state.trend_5m == Side.SHORT
-
-
-def test_update_mtf_trend_5m_goes_short_below_dead_zone():
-    state = MarketState()
-    state.ema_5m = 100.0
-    state.trend_5m = None
-    state.last_price = 99.96
-
-    update_mtf_trend(state)
-
-    assert state.trend_5m == Side.SHORT
+    update_trend_1h(state)
+    assert state.trend_1h is None

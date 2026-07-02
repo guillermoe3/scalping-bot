@@ -67,20 +67,14 @@ def test_detect_swing_points_finds_known_peak_and_valley():
     assert swing_lows == [2.0]
 
 
-def test_update_indicators_sets_atr_and_all_ema_fields():
+def test_update_indicators_computes_ema_1h_from_15m_closes():
     state = MarketState()
-    state.regime = Regime.TIGHT_CHANNEL
-    for c in _candles_with_closes([100.0 + i for i in range(25)]):
-        state.candles_15m.append(c)
-    for c in _candles_with_closes([100.0 + i for i in range(3)]):
-        state.candles_5m.append(c)
-
+    for i in range(30):
+        state.candles_15m.append(
+            Candle(open=100.0, high=101.0, low=99.0, close=100.0 + i, volume=1.0, timestamp=i * 900_000)
+        )
     update_indicators(state)
-
-    assert state.atr > 0.0
-    assert state.ema > 0.0
-    assert state.ema_5m > 0.0
-    assert state.ema_15m > 0.0
+    assert state.ema_1h > 0.0
 
 
 def test_update_indicators_uses_regime_adaptive_period_for_signal_ema():

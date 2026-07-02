@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from typing import List, Tuple
 
-from config import ATR_PERIOD, EMA_PERIOD_BREAKOUT, EMA_PERIOD_CHANNEL, EMA_PERIOD_RANGE, TREND_EMA_5M, TREND_EMA_15M
+from config import ATR_PERIOD, EMA_PERIOD_BREAKOUT, EMA_PERIOD_CHANNEL, EMA_PERIOD_RANGE, TREND_EMA_1H_ON_15M
 from state import Candle, Regime, MarketState
 
 
@@ -82,17 +82,10 @@ def detect_swing_points(candles: deque, lookback: int = 5) -> Tuple[List[float],
 # --- State update entry point ---
 
 def update_indicators(state: MarketState) -> None:
-    """Recompute ATR, EMA (regime-adaptive), and MTF EMAs from current candle buffers."""
+    """Recompute ATR, the regime-adaptive signal EMA, and the 1h-equivalent trend EMA,
+    all from the 15m candle buffer (the signal timeframe)."""
     if len(state.candles_15m) >= 2:
         state.atr = compute_atr(state.candles_15m)
-        closes_signal = [c.close for c in state.candles_15m]
-        period = ema_period_for_regime(state.regime)
-        state.ema = compute_ema(closes_signal, period)
-
-    if len(state.candles_5m) >= 2:
-        closes_5m = [c.close for c in state.candles_5m]
-        state.ema_5m = compute_ema(closes_5m, TREND_EMA_5M)
-
-    if len(state.candles_15m) >= 2:
-        closes_15m = [c.close for c in state.candles_15m]
-        state.ema_15m = compute_ema(closes_15m, TREND_EMA_15M)
+        closes = [c.close for c in state.candles_15m]
+        state.ema = compute_ema(closes, ema_period_for_regime(state.regime))
+        state.ema_1h = compute_ema(closes, TREND_EMA_1H_ON_15M)

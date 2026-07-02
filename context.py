@@ -4,28 +4,9 @@ import asyncio
 import logging
 
 from config import CORRELATION_BLOCK_THRESHOLD, MACRO_UPDATE_SECONDS
-from state import MarketState, Side
+from state import MarketState
 
 logger = logging.getLogger(__name__)
-
-
-def update_mtf_trends(state: MarketState) -> None:
-    """Derive 5m and 15m trend bias from EMA vs price relationship."""
-    p = state.last_price
-    if p <= 0:
-        return
-
-    if state.ema_15m > 0:
-        if p > state.ema_15m * 1.0005:
-            state.trend_15m = Side.LONG
-        elif p < state.ema_15m * 0.9995:
-            state.trend_15m = Side.SHORT
-
-    if state.ema_5m > 0:
-        if p > state.ema_5m * 1.0003:
-            state.trend_5m = Side.LONG
-        elif p < state.ema_5m * 0.9997:
-            state.trend_5m = Side.SHORT
 
 
 class MacroFilter:

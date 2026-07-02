@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 import yfinance as yf
 
-from context import MacroFilter, _pearson, update_mtf_trends
+from context import MacroFilter, _pearson
 from state import Candle, MarketState, Side
 
 
@@ -17,72 +17,6 @@ def _fake_download(closes):
     def fake(*args, **kwargs):
         return pd.DataFrame({"Close": closes})
     return fake
-
-
-def test_update_mtf_trends_15m_goes_long_above_dead_zone():
-    state = MarketState()
-    state.ema_15m = 100.0
-    state.trend_15m = None
-    state.last_price = 100.06
-
-    update_mtf_trends(state)
-
-    assert state.trend_15m == Side.LONG
-
-
-def test_update_mtf_trends_15m_unchanged_inside_dead_zone():
-    state = MarketState()
-    state.ema_15m = 100.0
-    state.trend_15m = Side.LONG
-    state.last_price = 100.0
-
-    update_mtf_trends(state)
-
-    assert state.trend_15m == Side.LONG
-
-
-def test_update_mtf_trends_15m_goes_short_below_dead_zone():
-    state = MarketState()
-    state.ema_15m = 100.0
-    state.trend_15m = None
-    state.last_price = 99.9
-
-    update_mtf_trends(state)
-
-    assert state.trend_15m == Side.SHORT
-
-
-def test_update_mtf_trends_5m_goes_long_above_dead_zone():
-    state = MarketState()
-    state.ema_5m = 100.0
-    state.trend_5m = None
-    state.last_price = 100.04
-
-    update_mtf_trends(state)
-
-    assert state.trend_5m == Side.LONG
-
-
-def test_update_mtf_trends_5m_unchanged_inside_dead_zone():
-    state = MarketState()
-    state.ema_5m = 100.0
-    state.trend_5m = Side.SHORT
-    state.last_price = 100.0
-
-    update_mtf_trends(state)
-
-    assert state.trend_5m == Side.SHORT
-
-
-def test_update_mtf_trends_5m_goes_short_below_dead_zone():
-    state = MarketState()
-    state.ema_5m = 100.0
-    state.trend_5m = None
-    state.last_price = 99.96
-
-    update_mtf_trends(state)
-
-    assert state.trend_5m == Side.SHORT
 
 
 def test_pearson_perfectly_correlated_series_returns_one():

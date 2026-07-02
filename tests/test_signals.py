@@ -12,7 +12,7 @@ def _valid_long_setup_state(atr: float = 10.0, spread: float = 0.1) -> MarketSta
     state.in_squeeze = True
     state.squeeze_direction = Side.LONG
     state.squeeze_reference_level = 95.0
-    state.trend_15m = None
+    state.trend_1h = None
     state.macro_blocks_longs = False
     state.macro_blocks_shorts = False
     return state
@@ -43,7 +43,7 @@ def _base_state(direction: Side = Side.LONG, regime: Regime = Regime.TIGHT_CHANN
     state.in_squeeze = True
     state.squeeze_direction = direction
     state.squeeze_reference_level = 95.0 if direction == Side.LONG else 105.0
-    state.trend_15m = None
+    state.trend_1h = None
     state.macro_blocks_longs = False
     state.macro_blocks_shorts = False
     return state
@@ -154,9 +154,9 @@ def test_entry_signal_rejected_when_squeeze_direction_is_none():
     assert check_entry_signal(state) is None
 
 
-def test_entry_signal_rejected_when_15m_trend_opposes_direction():
+def test_entry_signal_rejected_when_1h_trend_opposes_direction():
     state = _base_state(direction=Side.LONG)
-    state.trend_15m = Side.SHORT
+    state.trend_1h = Side.SHORT
     assert check_entry_signal(state) is None
 
 
