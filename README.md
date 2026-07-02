@@ -97,9 +97,9 @@ BINANCE_SECRET=...
 python main.py
 ```
 
-Starts in paper mode by default — no real orders are sent, fills are simulated by crossing the
-live bid/ask spread. Set `PAPER_MODE=false` with real Binance Futures API credentials to trade
-live, and only after thorough backtesting and paper-trading validation.
+Starts in paper mode by default — no real orders are sent; paper entries rest as post-only limit
+orders that fill only when price trades through the limit (and expire unfilled after a timeout);
+paper exits are simulated by crossing the live bid/ask spread. Set `PAPER_MODE=false` with real Binance Futures API credentials to trade live, and only after thorough backtesting and paper-trading validation.
 
 ## Backtesting
 
