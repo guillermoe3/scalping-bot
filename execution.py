@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
 import clock
@@ -14,6 +14,7 @@ from state import MarketState, Side
 logger = logging.getLogger(__name__)
 
 PAPER_MODE: bool = os.getenv("PAPER_MODE", "true").lower() == "true"
+_LIVE_FILL_POLL_SECONDS = 5.0
 
 
 @dataclass
@@ -48,6 +49,7 @@ class ExecutionEngine:
         self._on_trade_closed = on_trade_closed
         self._on_trade_opened = on_trade_opened
         self._pending_entry: Optional[PendingEntry] = None
+        self._last_fill_poll: float = 0.0
         if not PAPER_MODE:
             self._init_exchange()
 
@@ -86,12 +88,31 @@ class ExecutionEngine:
         if plan is None:
             return False
 
-        # Live post-only routing lands in Task 5; until then live mode
-        # behaves like paper for entries (position is simulated).
-        self._pending_entry = PendingEntry(plan=plan, placed_at=clock.now())
+        if PAPER_MODE or self._exchange is None:
+            self._pending_entry = PendingEntry(plan=plan, placed_at=clock.now())
+            logger.info(
+                "ENTRY PENDING %s limit @ %.2f | size=%.6f BTC | timeout=%ds",
+                side.value.upper(), limit_price, plan.size, ENTRY_ORDER_TIMEOUT_SECONDS,
+            )
+            return True
+
+        try:
+            order_side = "buy" if side == Side.LONG else "sell"
+            order = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self._exchange.create_limit_order(
+                    "BTC/USDT", order_side, plan.size, plan.price,
+                    params={"timeInForce": "GTX"},  # Binance Futures post-only
+                ),
+            )
+        except Exception:
+            logger.exception("Live post-only entry rejected or failed — no trade")
+            return False
+
+        self._pending_entry = PendingEntry(plan=plan, placed_at=clock.now(), order_id=order["id"])
         logger.info(
-            "ENTRY PENDING %s limit @ %.2f | size=%.6f BTC | timeout=%ds",
-            side.value.upper(), limit_price, plan.size, ENTRY_ORDER_TIMEOUT_SECONDS,
+            "ENTRY PENDING (live GTX) %s limit @ %.2f | size=%.6f BTC | id=%s",
+            side.value.upper(), plan.price, plan.size, order["id"],
         )
         return True
 
@@ -106,20 +127,38 @@ class ExecutionEngine:
             })
 
     async def check_pending_entry(self) -> None:
-        """Called on every trade tick. Fills or expires the resting entry order.
-
-        Paper fill model: the limit fills only when a trade prints strictly THROUGH
-        the limit price (conservative queue assumption — touching your price does
-        not guarantee a fill; trading through it does)."""
+        """Called on every trade tick. Fills or expires the resting entry order."""
         pending = self._pending_entry
         if pending is None:
             return
 
+        live = not (PAPER_MODE or self._exchange is None) and pending.order_id is not None
+
         if clock.now() - pending.placed_at >= ENTRY_ORDER_TIMEOUT_SECONDS:
             self._pending_entry = None
-            logger.info("Entry order timed out unfilled — cancelled")
+            if live:
+                await self._cancel_live_entry_keeping_partial(pending)
+            else:
+                logger.info("Entry order timed out unfilled — cancelled")
             return
 
+        if live:
+            if clock.now() - self._last_fill_poll < _LIVE_FILL_POLL_SECONDS:
+                return
+            self._last_fill_poll = clock.now()
+            try:
+                order = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self._exchange.fetch_order(pending.order_id, "BTC/USDT"),
+                )
+            except Exception:
+                logger.exception("fetch_order failed for pending entry %s", pending.order_id)
+                return
+            if order.get("status") == "closed":
+                self._fill_pending(pending.plan)
+            return
+
+        # Paper/backtest fill model: fill only when a trade prints strictly THROUGH
+        # the limit (conservative queue assumption).
         p = self.state.last_price
         plan = pending.plan
         traded_through = (
@@ -128,6 +167,36 @@ class ExecutionEngine:
         )
         if traded_through:
             self._fill_pending(plan)
+
+    async def _cancel_live_entry_keeping_partial(self, pending: PendingEntry) -> None:
+        """Cancel a timed-out live entry; if it was partially filled, keep the
+        filled fraction as a (smaller, lower-risk) position."""
+        try:
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._exchange.cancel_order(pending.order_id, "BTC/USDT"),
+            )
+            order = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._exchange.fetch_order(pending.order_id, "BTC/USDT"),
+            )
+        except Exception:
+            logger.exception("Cancel/fetch of timed-out entry %s failed — MANUAL CHECK REQUIRED", pending.order_id)
+            return
+        filled = float(order.get("filled") or 0.0)
+        if filled > 0:
+            logger.info("Timed-out entry partially filled (%.6f BTC) — keeping the partial", filled)
+            self._fill_pending(replace(pending.plan, size=filled))
+        else:
+            logger.info("Entry order timed out unfilled — cancelled on exchange")
+
+    def cancel_open_orders(self) -> None:
+        """Startup hygiene: a crash can leave an orphan resting entry on the exchange."""
+        if self._exchange is None:
+            return
+        try:
+            self._exchange.cancel_all_orders("BTC/USDT")
+            logger.info("Startup: cancelled all open BTC/USDT orders")
+        except Exception:
+            logger.exception("Startup cancel_all_orders failed")
 
     async def exit(self, reason: str) -> float:
         if self.state.position is None:

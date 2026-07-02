@@ -106,6 +106,7 @@ async def run() -> None:
 
     if not PAPER_MODE:
         safety.reconcile_with_exchange(state, engine.exchange)
+        engine.cancel_open_orders()
     safety.maybe_reset_daily(state, engine.exchange, on_day_rolled_over=on_day_rolled_over)
 
     wire_strategy(state, feed, engine)

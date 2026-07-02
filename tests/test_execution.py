@@ -250,3 +250,103 @@ def test_hooks_default_to_none_and_do_not_raise():
     engine = ExecutionEngine(state)  # no hooks passed
     _open_long(engine, state)
     asyncio.run(engine.exit("time_exit"))  # must not raise
+
+
+# --- live GTX entry path ---
+
+class _FakeLiveExchange:
+    def __init__(self):
+        self.limit_orders = []
+        self.cancelled = []
+        self.cancel_all_calls = []
+        self.order_status = {"status": "open", "filled": 0.0}
+
+    def create_limit_order(self, symbol, side, amount, price, params=None):
+        self.limit_orders.append((symbol, side, amount, price, params))
+        return {"id": "oid-1"}
+
+    def fetch_order(self, order_id, symbol):
+        return dict(self.order_status, id=order_id)
+
+    def cancel_order(self, order_id, symbol):
+        self.cancelled.append(order_id)
+
+    def cancel_all_orders(self, symbol):
+        self.cancel_all_calls.append(symbol)
+
+
+def _live_engine(state, monkeypatch):
+    engine = ExecutionEngine(state)
+    fake = _FakeLiveExchange()
+    engine._exchange = fake
+    monkeypatch.setattr(execution_module, "PAPER_MODE", False)
+    return engine, fake
+
+
+def test_live_enter_sends_post_only_gtx_limit(monkeypatch):
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine, fake = _live_engine(state, monkeypatch)
+
+    result = asyncio.run(engine.enter(Side.LONG))
+
+    assert result is True
+    assert state.position is None
+    symbol, side, amount, price, params = fake.limit_orders[0]
+    assert (symbol, side) == ("BTC/USDT", "buy")
+    assert price == pytest.approx(99.0)
+    assert params == {"timeInForce": "GTX"}
+    assert engine._pending_entry.order_id == "oid-1"
+
+
+def test_live_post_only_rejection_means_no_trade(monkeypatch):
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine, fake = _live_engine(state, monkeypatch)
+
+    def _reject(*a, **k):
+        raise RuntimeError("Order would immediately match and take")
+
+    fake.create_limit_order = _reject
+    result = asyncio.run(engine.enter(Side.LONG))
+
+    assert result is False
+    assert not engine.has_pending_entry
+
+
+def test_live_fill_detected_by_polling_opens_position_with_maker_fee(monkeypatch):
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine, fake = _live_engine(state, monkeypatch)
+    asyncio.run(engine.enter(Side.LONG))
+    fake.order_status = {"status": "closed", "filled": 0.5}
+    engine._last_fill_poll = 0.0  # force the next poll
+
+    asyncio.run(engine.check_pending_entry())
+
+    pos = state.position
+    assert pos is not None
+    assert pos.entry_price == pytest.approx(99.0)
+    assert pos.fees_paid == pytest.approx(pos.size * 99.0 * MAKER_FEE_RATE)
+
+
+def test_live_timeout_cancels_and_keeps_partial_fill(monkeypatch):
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine, fake = _live_engine(state, monkeypatch)
+    t0 = clock.now()
+    asyncio.run(engine.enter(Side.LONG))
+    planned_size = engine._pending_entry.plan.size
+    fake.order_status = {"status": "open", "filled": round(planned_size / 2, 6)}
+
+    monkeypatch.setattr(clock, "now", lambda: t0 + ENTRY_ORDER_TIMEOUT_SECONDS + 1)
+    asyncio.run(engine.check_pending_entry())
+
+    assert fake.cancelled == ["oid-1"]
+    assert state.position is not None
+    assert state.position.size == pytest.approx(planned_size / 2, rel=1e-4)
+
+
+def test_cancel_open_orders_calls_cancel_all(monkeypatch):
+    state = _state_with_book()
+    engine, fake = _live_engine(state, monkeypatch)
+
+    engine.cancel_open_orders()
+
+    assert fake.cancel_all_calls == ["BTC/USDT"]
