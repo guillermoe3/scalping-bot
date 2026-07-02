@@ -72,6 +72,7 @@ STATE_FILE_PATH = "safety_state.json"
 # Fees
 MAKER_FEE_RATE = 0.0002   # 0.02% per side, Binance Futures USDT-M maker, no BNB discount
 TAKER_FEE_RATE = 0.0005   # 0.05% per side, Binance Futures USDT-M, no BNB discount
+ENTRY_ORDER_TIMEOUT_SECONDS = 300  # cancel an unfilled post-only entry after 5 min (1/3 of a 15m bar)
 
 # Spread filter
 SPREAD_FILTER_ATR_PCT = 0.01  # block entries when spread > 1% of 15m ATR (~5.5x the old 1m ATR)

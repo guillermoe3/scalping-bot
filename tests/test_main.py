@@ -2,7 +2,7 @@ import asyncio
 
 from execution import ExecutionEngine
 from main import wire_strategy
-from state import Candle, MarketState
+from state import Candle, MarketState, Side
 
 
 class _FakeFeed:
@@ -76,3 +76,21 @@ def test_on_candle_1m_handler_does_not_run_the_signal_pipeline():
     asyncio.run(feed.candle_1m_handlers[0](_candle(25)))
 
     assert state.atr == 0.0  # ATR now comes only from the 15m pipeline
+
+
+def test_on_trade_handler_checks_pending_entries():
+    state = MarketState()
+    state.last_bid = 99.0
+    state.last_ask = 101.0
+    state.last_price = 100.0
+    state.atr = 2.0
+    feed = _FakeFeed()
+    engine = ExecutionEngine(state)
+    wire_strategy(state, feed, engine)
+    asyncio.run(engine.enter(Side.LONG))
+
+    # the trade handler does not mutate last_price (the feed does); simulate the feed:
+    state.last_price = 98.9
+    asyncio.run(feed.trade_handlers[0](98.9, 1.0, False, 0.0))
+
+    assert state.position is not None

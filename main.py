@@ -40,6 +40,7 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
     # -------------------------------------------------------------------------
     async def on_trade(price: float, qty: float, is_buyer_maker: bool, ts: float) -> None:
         update_volume_velocity(state)
+        await engine.check_pending_entry()
         await engine.monitor_and_exit()
 
     # -------------------------------------------------------------------------

@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 import clock
-from risk import apply_partial_close, close_position, manage_position, open_position
+from config import ENTRY_ORDER_TIMEOUT_SECONDS, MAKER_FEE_RATE
+from risk import EntryPlan, apply_partial_close, close_position, manage_position, open_planned, open_position, plan_entry
 from state import MarketState, Side
 
 logger = logging.getLogger(__name__)
@@ -14,14 +16,22 @@ logger = logging.getLogger(__name__)
 PAPER_MODE: bool = os.getenv("PAPER_MODE", "true").lower() == "true"
 
 
+@dataclass
+class PendingEntry:
+    """A resting post-only limit entry, placed but not yet filled."""
+    plan: EntryPlan
+    placed_at: float                # clock seconds
+    order_id: Optional[str] = None  # live only
+
+
 class ExecutionEngine:
     """
     Handles order routing.
 
-    PAPER_MODE=true  → orders are simulated by crossing the bid/ask spread (entries fill
-                        at last_ask/last_bid, exits at last_bid/last_ask), with no fee
-                        assumed beyond TAKER_FEE_RATE.
-    PAPER_MODE=false → routes market orders via ccxt to Binance Futures.
+    PAPER_MODE=true  → entries rest as post-only limits filled when price trades through;
+                        exits cross the spread as before.
+    PAPER_MODE=false → live post-only routing lands in Task 5; until then live mode
+                        behaves like paper for entries (position is simulated).
 
     Position management (SL, TP, trailing) is always handled in-process regardless
     of mode. In live mode, the in-process exit logic fires a market close order.
@@ -37,6 +47,7 @@ class ExecutionEngine:
         self._exchange = None
         self._on_trade_closed = on_trade_closed
         self._on_trade_opened = on_trade_opened
+        self._pending_entry: Optional[PendingEntry] = None
         if not PAPER_MODE:
             self._init_exchange()
 
@@ -58,13 +69,35 @@ class ExecutionEngine:
     def exchange(self):
         return self._exchange
 
+    @property
+    def has_pending_entry(self) -> bool:
+        return self._pending_entry is not None
+
     async def enter(self, side: Side) -> bool:
+        """Place a post-only limit entry at the best bid/ask. Returns True if the
+        order was placed (NOT filled) — the position opens in check_pending_entry."""
+        if self.state.position is not None or self._pending_entry is not None:
+            return False
         if self.state.last_bid <= 0 or self.state.last_ask <= 0:
             return False
 
-        fill_price = self.state.last_ask if side == Side.LONG else self.state.last_bid
-        open_position(self.state, side, fill_price)
+        limit_price = self.state.last_bid if side == Side.LONG else self.state.last_ask
+        plan = plan_entry(self.state, side, limit_price)
+        if plan is None:
+            return False
 
+        # Live post-only routing lands in Task 5; until then live mode
+        # behaves like paper for entries (position is simulated).
+        self._pending_entry = PendingEntry(plan=plan, placed_at=clock.now())
+        logger.info(
+            "ENTRY PENDING %s limit @ %.2f | size=%.6f BTC | timeout=%ds",
+            side.value.upper(), limit_price, plan.size, ENTRY_ORDER_TIMEOUT_SECONDS,
+        )
+        return True
+
+    def _fill_pending(self, plan: EntryPlan) -> None:
+        self._pending_entry = None
+        open_planned(self.state, plan, fee_rate=MAKER_FEE_RATE)
         opened = self.state.position
         if self._on_trade_opened is not None and opened is not None:
             self._on_trade_opened({
@@ -72,23 +105,29 @@ class ExecutionEngine:
                 "size": opened.size, "stop_loss": opened.stop_loss, "tp1": opened.tp1,
             })
 
-        if PAPER_MODE or self._exchange is None:
-            return True
+    async def check_pending_entry(self) -> None:
+        """Called on every trade tick. Fills or expires the resting entry order.
 
-        pos = self.state.position
-        if pos is None:
-            return False
+        Paper fill model: the limit fills only when a trade prints strictly THROUGH
+        the limit price (conservative queue assumption — touching your price does
+        not guarantee a fill; trading through it does)."""
+        pending = self._pending_entry
+        if pending is None:
+            return
 
-        try:
-            order_side = "buy" if side == Side.LONG else "sell"
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self._exchange.create_market_order("BTC/USDT", order_side, pos.size),
-            )
-            return True
-        except Exception:
-            logger.exception("Live entry order failed — position kept in paper")
-            return False
+        if clock.now() - pending.placed_at >= ENTRY_ORDER_TIMEOUT_SECONDS:
+            self._pending_entry = None
+            logger.info("Entry order timed out unfilled — cancelled")
+            return
+
+        p = self.state.last_price
+        plan = pending.plan
+        traded_through = (
+            (plan.side == Side.LONG and p < plan.price)
+            or (plan.side == Side.SHORT and p > plan.price)
+        )
+        if traded_through:
+            self._fill_pending(plan)
 
     async def exit(self, reason: str) -> float:
         if self.state.position is None:
