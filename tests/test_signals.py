@@ -56,7 +56,7 @@ def test_update_squeeze_not_active_before_min_bars():
     state.last_price = 108.0
 
     for i in range(SQUEEZE_MIN_BARS - 1):
-        state.candles_1m.append(_candle(108, 109, 107, 108, i))
+        state.candles_15m.append(_candle(108, 109, 107, 108, i))
         update_squeeze(state)
 
     assert state.in_squeeze is False
@@ -70,7 +70,7 @@ def test_update_squeeze_activates_with_short_direction_when_price_below_level():
     state.last_price = 108.0
 
     for i in range(SQUEEZE_MIN_BARS):
-        state.candles_1m.append(_candle(108, 109, 107, 108, i))
+        state.candles_15m.append(_candle(108, 109, 107, 108, i))
         update_squeeze(state)
 
     assert state.in_squeeze is True
@@ -84,7 +84,7 @@ def test_update_squeeze_activates_with_long_direction_when_price_above_level():
     state.last_price = 92.0
 
     for i in range(SQUEEZE_MIN_BARS):
-        state.candles_1m.append(_candle(92, 93, 91, 92, i))
+        state.candles_15m.append(_candle(92, 93, 91, 92, i))
         update_squeeze(state)
 
     assert state.in_squeeze is True
@@ -97,11 +97,11 @@ def test_update_squeeze_resets_when_compression_breaks():
     state.swing_highs.append(110.0)
     state.last_price = 108.0
     for i in range(SQUEEZE_MIN_BARS):
-        state.candles_1m.append(_candle(108, 109, 107, 108, i))
+        state.candles_15m.append(_candle(108, 109, 107, 108, i))
         update_squeeze(state)
     assert state.in_squeeze is True
 
-    state.candles_1m.append(_candle(108, 120, 107, 119, 99))  # range breaks compression
+    state.candles_15m.append(_candle(108, 120, 107, 119, 99))  # range breaks compression
     update_squeeze(state)
 
     assert state.in_squeeze is False
@@ -116,12 +116,12 @@ def test_update_squeeze_resets_when_price_leaves_level_proximity():
     state.swing_highs.append(110.0)
     state.last_price = 108.0
     for i in range(SQUEEZE_MIN_BARS):
-        state.candles_1m.append(_candle(108, 109, 107, 108, i))
+        state.candles_15m.append(_candle(108, 109, 107, 108, i))
         update_squeeze(state)
     assert state.in_squeeze is True
 
     state.last_price = 50.0  # still compressed range, but far from the level
-    state.candles_1m.append(_candle(50, 51, 49, 50, 99))
+    state.candles_15m.append(_candle(50, 51, 49, 50, 99))
     update_squeeze(state)
 
     assert state.in_squeeze is False
@@ -174,14 +174,14 @@ def test_entry_signal_rejected_when_macro_blocks_shorts():
 
 def test_entry_signal_rejected_when_breakout_candle_opposes_squeeze_direction():
     state = _base_state(direction=Side.LONG, regime=Regime.BREAKOUT)
-    state.candles_1m.append(_candle(110, 111, 99, 100, 0))  # bearish candle
+    state.candles_15m.append(_candle(110, 111, 99, 100, 0))  # bearish candle
 
     assert check_entry_signal(state) is None
 
 
 def test_entry_signal_allowed_when_breakout_candle_aligns_with_squeeze_direction():
     state = _base_state(direction=Side.LONG, regime=Regime.BREAKOUT)
-    state.candles_1m.append(_candle(100, 111, 99, 110, 0))  # bullish candle
+    state.candles_15m.append(_candle(100, 111, 99, 110, 0))  # bullish candle
 
     assert check_entry_signal(state) == Side.LONG
 
@@ -189,7 +189,7 @@ def test_entry_signal_allowed_when_breakout_candle_aligns_with_squeeze_direction
 def test_entry_signal_rejected_when_cvd_diverges_against_long():
     state = _base_state(direction=Side.LONG)
     for h, l in [(10.0, 8.0), (11.0, 9.0), (13.0, 9.0)]:
-        state.candles_1m.append(_candle(l, h, l, h))
+        state.candles_15m.append(_candle(l, h, l, h))
     for v in [5.0, 4.0, 2.0]:
         state.cvd_per_candle.append(v)
 

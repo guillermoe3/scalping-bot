@@ -28,7 +28,7 @@ def _boring_state(atr: float = 10.0) -> MarketState:
     state = MarketState()
     state.atr = atr
     for i in range(20):
-        state.candles_1m.append(_boring(i))
+        state.candles_15m.append(_boring(i))
     return state
 
 
@@ -89,7 +89,7 @@ def test_ema_is_sloping_true_when_drift_exceeds_threshold():
     state.atr = 10.0
     state.ema = 110.0  # close 10 bars ago is 105.0 -> drift 5.0 > 0.15*10=1.5
     for i in range(10):
-        state.candles_1m.append(_boring(i))
+        state.candles_15m.append(_boring(i))
 
     assert _ema_is_sloping(state, state.atr) is True
 
@@ -99,7 +99,7 @@ def test_ema_is_sloping_false_when_drift_within_threshold():
     state.atr = 10.0
     state.ema = 105.5  # drift 0.5 <= 1.5
     for i in range(10):
-        state.candles_1m.append(_boring(i))
+        state.candles_15m.append(_boring(i))
 
     assert _ema_is_sloping(state, state.atr) is False
 
@@ -109,7 +109,7 @@ def test_ema_is_sloping_false_below_minimum_candle_count():
     state.atr = 10.0
     state.ema = 110.0
     for i in range(9):
-        state.candles_1m.append(_boring(i))
+        state.candles_15m.append(_boring(i))
 
     assert _ema_is_sloping(state, state.atr) is False
 
@@ -118,7 +118,7 @@ def test_infer_candidate_unknown_below_minimum_candle_count():
     state = MarketState()
     state.atr = 10.0
     for i in range(3):
-        state.candles_1m.append(_boring(i))
+        state.candles_15m.append(_boring(i))
 
     assert _infer_candidate(state) == Regime.UNKNOWN
 
@@ -127,8 +127,8 @@ def test_infer_candidate_breakout_on_large_body_candle():
     state = MarketState()
     state.atr = 10.0
     for i in range(5):
-        state.candles_1m.append(_boring(i))
-    state.candles_1m.append(_candle(100.0, 120.0, 99.0, 120.0, 5))
+        state.candles_15m.append(_boring(i))
+    state.candles_15m.append(_candle(100.0, 120.0, 99.0, 120.0, 5))
 
     assert _infer_candidate(state) == Regime.BREAKOUT
 
@@ -137,7 +137,7 @@ def test_infer_candidate_tight_channel_when_tight_but_not_swept():
     state = MarketState()
     state.atr = 10.0
     for c in _tight_unswept_candles():
-        state.candles_1m.append(c)
+        state.candles_15m.append(c)
 
     assert _infer_candidate(state) == Regime.TIGHT_CHANNEL
 
@@ -146,8 +146,8 @@ def test_infer_candidate_trading_range_when_tight_swept_and_not_sloping():
     state = MarketState()
     state.atr = 10.0
     for c in _tight_swept_candles():
-        state.candles_1m.append(c)
-    state.ema = list(state.candles_1m)[-10].close  # keep EMA flat -> not sloping
+        state.candles_15m.append(c)
+    state.ema = list(state.candles_15m)[-10].close  # keep EMA flat -> not sloping
 
     assert _infer_candidate(state) == Regime.TRADING_RANGE
 
@@ -180,9 +180,9 @@ def test_update_regime_interrupted_streak_resets_to_new_candidate():
     assert state.regime_confirm_count == 2
     assert state.pending_regime == Regime.TRADING_RANGE
 
-    state.candles_1m.clear()
+    state.candles_15m.clear()
     for c in _tight_unswept_candles():
-        state.candles_1m.append(c)
+        state.candles_15m.append(c)
     update_regime(state)  # candidate is now TIGHT_CHANNEL, not TRADING_RANGE
 
     assert state.regime == Regime.UNKNOWN

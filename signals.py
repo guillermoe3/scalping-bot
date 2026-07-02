@@ -35,7 +35,7 @@ def update_squeeze(state: MarketState) -> None:
     if state.atr <= 0:
         return
 
-    candles = list(state.candles_1m)
+    candles = list(state.candles_15m)
     if not candles:
         return
 
@@ -110,7 +110,7 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
 
     # In a breakout, only trade in the breakout's direction
     if state.regime == Regime.BREAKOUT:
-        candles = list(state.candles_1m)
+        candles = list(state.candles_15m)
         if candles:
             last = candles[-1]
             aligned = (direction == Side.LONG and last.bullish) or \

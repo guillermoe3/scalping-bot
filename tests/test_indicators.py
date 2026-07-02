@@ -71,10 +71,9 @@ def test_update_indicators_sets_atr_and_all_ema_fields():
     state = MarketState()
     state.regime = Regime.TIGHT_CHANNEL
     for c in _candles_with_closes([100.0 + i for i in range(25)]):
-        state.candles_1m.append(c)
+        state.candles_15m.append(c)
     for c in _candles_with_closes([100.0 + i for i in range(3)]):
         state.candles_5m.append(c)
-        state.candles_15m.append(c)
 
     update_indicators(state)
 
@@ -84,19 +83,19 @@ def test_update_indicators_sets_atr_and_all_ema_fields():
     assert state.ema_15m > 0.0
 
 
-def test_update_indicators_uses_regime_adaptive_period_for_1m_ema():
+def test_update_indicators_uses_regime_adaptive_period_for_signal_ema():
     closes = [100.0 + i for i in range(25)]
 
     breakout_state = MarketState()
     breakout_state.regime = Regime.BREAKOUT
     for c in _candles_with_closes(closes):
-        breakout_state.candles_1m.append(c)
+        breakout_state.candles_15m.append(c)
     update_indicators(breakout_state)
 
     unknown_state = MarketState()
     unknown_state.regime = Regime.UNKNOWN
     for c in _candles_with_closes(closes):
-        unknown_state.candles_1m.append(c)
+        unknown_state.candles_15m.append(c)
     update_indicators(unknown_state)
 
     assert breakout_state.ema != pytest.approx(unknown_state.ema)

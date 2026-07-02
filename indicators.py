@@ -83,11 +83,11 @@ def detect_swing_points(candles: deque, lookback: int = 5) -> Tuple[List[float],
 
 def update_indicators(state: MarketState) -> None:
     """Recompute ATR, EMA (regime-adaptive), and MTF EMAs from current candle buffers."""
-    if len(state.candles_1m) >= 2:
-        state.atr = compute_atr(state.candles_1m)
-        closes_1m = [c.close for c in state.candles_1m]
+    if len(state.candles_15m) >= 2:
+        state.atr = compute_atr(state.candles_15m)
+        closes_signal = [c.close for c in state.candles_15m]
         period = ema_period_for_regime(state.regime)
-        state.ema = compute_ema(closes_1m, period)
+        state.ema = compute_ema(closes_signal, period)
 
     if len(state.candles_5m) >= 2:
         closes_5m = [c.close for c in state.candles_5m]

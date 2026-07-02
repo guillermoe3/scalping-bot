@@ -171,7 +171,7 @@ def _apply_structural_trail(state: MarketState) -> None:
     if pos is None:
         return
 
-    highs, lows = detect_swing_points(state.candles_1m, lookback=3)
+    highs, lows = detect_swing_points(state.candles_15m, lookback=3)
 
     if pos.side == Side.LONG and lows:
         # Trail behind the highest recent swing low that is above our original SL

@@ -2,7 +2,7 @@ import asyncio
 
 from execution import ExecutionEngine
 from main import wire_strategy
-from state import MarketState
+from state import Candle, MarketState
 
 
 class _FakeFeed:
@@ -25,7 +25,12 @@ class _FakeFeed:
         self.candle_15m_handlers.append(fn)
 
 
-def test_wire_strategy_registers_one_handler_per_event_type():
+def _candle(i: int) -> Candle:
+    return Candle(open=100.0 + i, high=101.0 + i, low=99.0 + i,
+                  close=100.0 + i, volume=1.0, timestamp=i * 900_000)
+
+
+def test_wire_strategy_registers_trade_1m_and_15m_handlers_only():
     state = MarketState()
     feed = _FakeFeed()
     engine = ExecutionEngine(state)
@@ -33,9 +38,9 @@ def test_wire_strategy_registers_one_handler_per_event_type():
     wire_strategy(state, feed, engine)
 
     assert len(feed.trade_handlers) == 1
-    assert len(feed.candle_1m_handlers) == 1
-    assert len(feed.candle_5m_handlers) == 1
-    assert len(feed.candle_15m_handlers) == 1
+    assert len(feed.candle_1m_handlers) == 1   # debug logging only
+    assert len(feed.candle_5m_handlers) == 0   # nothing left to do on 5m closes
+    assert len(feed.candle_15m_handlers) == 1  # full signal pipeline
 
 
 def test_wire_strategy_on_trade_handler_runs_without_raising():
@@ -47,17 +52,27 @@ def test_wire_strategy_on_trade_handler_runs_without_raising():
     asyncio.run(feed.trade_handlers[0](100.0, 1.0, False, 0.0))  # must not raise
 
 
-def test_wire_strategy_on_candle_1m_handler_updates_indicators():
-    from state import Candle
-
+def test_on_candle_15m_handler_updates_atr_from_15m_buffer():
     state = MarketState()
     for i in range(25):
-        state.candles_1m.append(Candle(open=100.0 + i, high=101.0 + i, low=99.0 + i, close=100.0 + i, volume=1.0, timestamp=i * 60_000))
+        state.candles_15m.append(_candle(i))
     feed = _FakeFeed()
     engine = ExecutionEngine(state)
     wire_strategy(state, feed, engine)
 
-    closing_candle = Candle(open=125.0, high=126.0, low=124.0, close=125.0, volume=1.0, timestamp=25 * 60_000)
-    asyncio.run(feed.candle_1m_handlers[0](closing_candle))
+    asyncio.run(feed.candle_15m_handlers[0](_candle(25)))
 
     assert state.atr > 0.0
+
+
+def test_on_candle_1m_handler_does_not_run_the_signal_pipeline():
+    state = MarketState()
+    for i in range(25):
+        state.candles_1m.append(_candle(i))
+    feed = _FakeFeed()
+    engine = ExecutionEngine(state)
+    wire_strategy(state, feed, engine)
+
+    asyncio.run(feed.candle_1m_handlers[0](_candle(25)))
+
+    assert state.atr == 0.0  # ATR now comes only from the 15m pipeline

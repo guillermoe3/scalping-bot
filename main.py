@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
     """Registers the strategy's event handlers against feed. feed can be
     DataFeed (live) or BacktestFeed (backtest) — it only needs to expose
-    the same on_trade/on_candle_1m/on_candle_5m/on_candle_15m registration
+    the same on_trade/on_candle_1m/on_candle_15m registration
     interface (duck typing, no shared base class)."""
 
     # -------------------------------------------------------------------------
@@ -43,9 +43,15 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
         await engine.monitor_and_exit()
 
     # -------------------------------------------------------------------------
-    # 1-minute candle close — primary signal evaluation clock
+    # 1-minute candle close — debug heartbeat only (signal clock is 15m)
     # -------------------------------------------------------------------------
     async def on_candle_1m(candle: Candle) -> None:
+        logger.debug("1m | close=%.2f", candle.close)
+
+    # -------------------------------------------------------------------------
+    # 15-minute candle close — primary signal evaluation clock
+    # -------------------------------------------------------------------------
+    async def on_candle_15m(candle: Candle) -> None:
         # 1. Snapshot CVD for this closed candle, reset for next
         snapshot_cvd_on_close(state)
 
@@ -55,12 +61,12 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
         # 3. Update regime state machine (hysteresis protected)
         update_regime(state)
 
-        # 4. Update MTF trend bias from EMA slopes
+        # 4. Update MTF trend bias
         update_mtf_trend(state)
         update_mtf_trends(state)
 
         # 5. Refresh structural swing points
-        highs, lows = detect_swing_points(state.candles_1m)
+        highs, lows = detect_swing_points(state.candles_15m)
         state.swing_highs.clear()
         state.swing_highs.extend(highs)
         state.swing_lows.clear()
@@ -75,39 +81,13 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
             if signal is not None:
                 await engine.enter(signal)
 
-        logger.debug(
-            "1m | close=%.2f atr=%.2f ema=%.2f regime=%s trend15=%s squeeze=%s",
-            candle.close,
-            state.atr,
-            state.ema,
-            state.regime.value,
-            state.trend_15m.value if state.trend_15m else "?",
-            state.in_squeeze,
-        )
-
-    # -------------------------------------------------------------------------
-    # 5m candle close — MTF indicator refresh
-    # -------------------------------------------------------------------------
-    async def on_candle_5m(candle: Candle) -> None:
-        update_indicators(state)
-        update_mtf_trend(state)
-
-    # -------------------------------------------------------------------------
-    # 15m candle close — highest context update
-    # -------------------------------------------------------------------------
-    async def on_candle_15m(candle: Candle) -> None:
-        update_indicators(state)
-        update_mtf_trend(state)
         logger.info(
-            "15m | close=%.2f ema15=%.2f trend=%s",
-            candle.close,
-            state.ema_15m,
-            state.trend_15m.value if state.trend_15m else "?",
+            "15m | close=%.2f atr=%.2f ema=%.2f regime=%s squeeze=%s",
+            candle.close, state.atr, state.ema, state.regime.value, state.in_squeeze,
         )
 
     feed.on_trade(on_trade)
     feed.on_candle_1m(on_candle_1m)
-    feed.on_candle_5m(on_candle_5m)
     feed.on_candle_15m(on_candle_15m)
 
 

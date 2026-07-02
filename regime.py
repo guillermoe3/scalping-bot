@@ -49,8 +49,8 @@ def _has_liquidity_sweeps_at_both_extremes(candles: deque, lookback: int = RANGE
 
 
 def _ema_is_sloping(state: MarketState, atr: float) -> bool:
-    """True if the 1m EMA has drifted more than 0.15 ATR vs 10 candles ago."""
-    c_list = list(state.candles_1m)
+    """True if the 15m EMA has drifted more than 0.15 ATR vs 10 candles ago."""
+    c_list = list(state.candles_15m)
     if len(c_list) < 10 or state.ema <= 0:
         return False
     older_close = c_list[-10].close
@@ -60,7 +60,7 @@ def _ema_is_sloping(state: MarketState, atr: float) -> bool:
 # --- Candidate regime inference ---
 
 def _infer_candidate(state: MarketState) -> Regime:
-    c_list = list(state.candles_1m)
+    c_list = list(state.candles_15m)
     if len(c_list) < 5 or state.atr <= 0:
         return Regime.UNKNOWN
 
@@ -74,7 +74,7 @@ def _infer_candidate(state: MarketState) -> Regime:
 
     if tight_count >= 3:
         sloping = _ema_is_sloping(state, state.atr)
-        swept = _has_liquidity_sweeps_at_both_extremes(state.candles_1m)
+        swept = _has_liquidity_sweeps_at_both_extremes(state.candles_15m)
 
         if swept and not sloping:
             return Regime.TRADING_RANGE
@@ -92,7 +92,7 @@ def update_regime(state: MarketState) -> None:
     consecutive candles before a transition is committed.
     UNKNOWN candidates are ignored — regime is never downgraded by noise.
     """
-    if len(state.candles_1m) < 10:
+    if len(state.candles_15m) < 10:
         return
 
     candidate = _infer_candidate(state)
