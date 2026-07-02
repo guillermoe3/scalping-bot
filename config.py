@@ -70,6 +70,7 @@ KILL_SWITCH_CONSECUTIVE_LOSSES = 3      # 3 losing trades in a row halts new ent
 STATE_FILE_PATH = "safety_state.json"
 
 # Fees
+MAKER_FEE_RATE = 0.0002   # 0.02% per side, Binance Futures USDT-M maker, no BNB discount
 TAKER_FEE_RATE = 0.0005   # 0.05% per side, Binance Futures USDT-M, no BNB discount
 
 # Spread filter

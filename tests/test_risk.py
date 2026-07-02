@@ -2,12 +2,15 @@ import pytest
 
 import clock
 import safety
-from config import ACCOUNT_RISK_PCT, INITIAL_SL_ATR, PAPER_BALANCE_USDT, TAKER_FEE_RATE, TP1_CLOSE_PCT
+from config import ACCOUNT_RISK_PCT, INITIAL_SL_ATR, MAKER_FEE_RATE, PAPER_BALANCE_USDT, TAKER_FEE_RATE, TP1_CLOSE_PCT
 from risk import (
+    EntryPlan,
     apply_partial_close,
     check_tp1,
     close_position,
+    open_planned,
     open_position,
+    plan_entry,
 )
 from state import MarketState, Side
 
@@ -225,7 +228,49 @@ def test_open_position_uses_real_zero_balance_not_paper_fallback():
 
     open_position(state, Side.LONG, price=100.0)
 
+    # Zero balance yields size=0, which is rejected by plan_entry — no position is opened.
     sl_dist = INITIAL_SL_ATR * state.atr
     expected_size = round((0.0 * ACCOUNT_RISK_PCT) / sl_dist, 6)
     assert expected_size == 0.0
-    assert state.position.size == pytest.approx(expected_size)
+    assert state.position is None
+
+
+def test_plan_entry_builds_size_and_levels_without_opening():
+    state = MarketState()
+    state.atr = 2.0
+    plan = plan_entry(state, Side.LONG, 100.0, balance=10_000.0)
+
+    assert state.position is None
+    assert plan.side == Side.LONG
+    assert plan.price == pytest.approx(100.0)
+    assert plan.stop_loss == pytest.approx(100.0 - INITIAL_SL_ATR * 2.0)
+    assert plan.size == pytest.approx(10_000.0 * ACCOUNT_RISK_PCT / (INITIAL_SL_ATR * 2.0))
+    assert plan.atr == pytest.approx(2.0)
+
+
+def test_plan_entry_returns_none_when_atr_is_zero():
+    state = MarketState()
+    state.atr = 0.0
+    assert plan_entry(state, Side.LONG, 100.0, balance=10_000.0) is None
+
+
+def test_open_planned_applies_the_given_fee_rate():
+    state = MarketState()
+    state.atr = 2.0
+    plan = plan_entry(state, Side.LONG, 100.0, balance=10_000.0)
+
+    open_planned(state, plan, fee_rate=MAKER_FEE_RATE)
+
+    pos = state.position
+    assert pos is not None
+    assert pos.entry_price == pytest.approx(100.0)
+    assert pos.fees_paid == pytest.approx(plan.size * 100.0 * MAKER_FEE_RATE)
+    assert state.pnl_today == pytest.approx(-pos.fees_paid)
+
+
+def test_open_position_wrapper_still_charges_taker_fee():
+    state = MarketState()
+    state.atr = 2.0
+    open_position(state, Side.LONG, 100.0, balance=10_000.0)
+    pos = state.position
+    assert pos.fees_paid == pytest.approx(pos.size * 100.0 * TAKER_FEE_RATE)
