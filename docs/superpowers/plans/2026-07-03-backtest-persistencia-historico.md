@@ -58,9 +58,9 @@ def _isolate_cache_dir(tmp_path, monkeypatch):
 
 
 def test_day_str_converts_ms_to_utc_date():
-    # 2026-04-01 00:00:00 UTC = 1774915200000 ms
-    assert trade_cache.day_str(1774915200000) == "2026-04-01"
-    assert trade_cache.day_str(1774915200000 + 86_399_999) == "2026-04-01"
+    # 2026-04-01 00:00:00 UTC = 1775001600000 ms
+    assert trade_cache.day_str(1775001600000) == "2026-04-01"
+    assert trade_cache.day_str(1775001600000 + 86_399_999) == "2026-04-01"
 
 
 def test_day_path_uses_cache_dir_and_day():
@@ -75,7 +75,7 @@ def test_read_day_returns_none_when_missing():
 
 
 def test_write_then_read_roundtrip():
-    rows = [[1774915200000, 50000.0, 0.5, True], [1774915200500, 50001.0, 0.2, False]]
+    rows = [[1775001600000, 50000.0, 0.5, True], [1775001600500, 50001.0, 0.2, False]]
     trade_cache.write_day("2026-04-01", rows)
     assert trade_cache.has_day("2026-04-01")
     assert trade_cache.read_day("2026-04-01") == rows
@@ -527,7 +527,7 @@ from backtest_feed import BacktestFeed, find_missing_days
 from state import MarketState
 
 DAY_MS = 24 * 60 * 60 * 1000
-DAY0 = 1774915200000  # 2026-04-01 00:00 UTC
+DAY0 = 1775001600000  # 2026-04-01 00:00 UTC
 
 
 def test_fetch_trades_prefers_compact_cache_over_exchange():

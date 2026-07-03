@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import csv
-from typing import List
+import json
+import math
+import os
+import re
+import subprocess
+from datetime import datetime
+from typing import List, Optional
 
 
 def compute_summary(trade_records: List[dict]) -> dict:
@@ -66,3 +72,84 @@ def write_trade_log_csv(trade_records: List[dict], path: str) -> None:
             row = dict(r)
             row["side"] = row["side"].value
             writer.writerow(row)
+
+
+def downsample_equity(nets: List[float], max_points: int = 500) -> List[list]:
+    if max_points < 2:
+        raise ValueError("max_points must be >= 2")
+    points: List[list] = []
+    equity = 0.0
+    for i, n in enumerate(nets, start=1):
+        equity += n
+        points.append([i, equity])
+    if len(points) <= max_points:
+        return points
+    step = (len(points) - 1) / (max_points - 1)
+    sampled = [points[round(k * step)] for k in range(max_points - 1)]
+    sampled.append(points[-1])
+    return sampled
+
+
+def git_commit_info() -> dict:
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip() != ""
+        return {"commit": commit, "dirty": dirty}
+    except Exception:
+        return {"commit": "unknown", "dirty": False}
+
+
+def make_run_dir_name(now_dt: datetime, label: Optional[str]) -> str:
+    name = now_dt.strftime("%Y-%m-%d_%H-%M-%S")
+    if label:
+        name += "_" + re.sub(r"[^a-z0-9_-]", "-", label.lower())
+    return name
+
+
+def _jsonable(value):
+    if isinstance(value, float) and math.isinf(value):
+        return "inf"
+    return value
+
+
+def write_run(base_dir: str, dir_name: str, meta: dict, summary: dict,
+              equity_curve: List[list], trade_records: List[dict]) -> str:
+    run_dir = os.path.join(base_dir, dir_name)
+    os.makedirs(run_dir, exist_ok=True)
+    with open(os.path.join(run_dir, "meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
+    payload = {
+        "metrics": {k: _jsonable(v) for k, v in summary.items()},
+        "equity_curve": equity_curve,
+        "final_equity": equity_curve[-1][1] if equity_curve else 0.0,
+    }
+    with open(os.path.join(run_dir, "summary.json"), "w") as f:
+        json.dump(payload, f, indent=2)
+    write_trade_log_csv(trade_records, os.path.join(run_dir, "trades.csv"))
+    return run_dir
+
+
+def main_cli(argv=None) -> int:
+    import argparse
+
+    from backtest_html import write_index
+
+    parser = argparse.ArgumentParser(description="Backtest report utilities.")
+    parser.add_argument("--rebuild-index", action="store_true")
+    parser.add_argument("--runs-dir", default="backtest_runs")
+    args = parser.parse_args(argv)
+    if args.rebuild_index:
+        print(write_index(args.runs_dir))
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main_cli())

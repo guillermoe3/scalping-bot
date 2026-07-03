@@ -4,16 +4,27 @@ import argparse
 import asyncio
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 
 import safety
 from backtest_feed import BacktestFeed
-from backtest_report import compute_summary, write_trade_log_csv
+from backtest_html import write_index
+from backtest_report import (
+    compute_summary,
+    downsample_equity,
+    git_commit_info,
+    make_run_dir_name,
+    write_run,
+    write_trade_log_csv,
+)
 from config import BACKTEST_SYNTHETIC_SPREAD_PCT
 from execution import ExecutionEngine
 from main import wire_strategy
 from risk import PAPER_BALANCE_USDT
 from state import MarketState
+
+RUNS_DIR = "backtest_runs"
 
 
 def _parse_date_utc(value: str) -> int:
@@ -30,6 +41,7 @@ def parse_args(argv) -> argparse.Namespace:
     parser.add_argument("--spread-pct", type=float, default=BACKTEST_SYNTHETIC_SPREAD_PCT)
     parser.add_argument("--out", default="backtest_trades.csv")
     parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--label", default=None, help="Etiqueta corta para identificar la corrida en el comparador")
     return parser.parse_args(argv)
 
 
@@ -42,6 +54,7 @@ def validate_range(start_ms: int, end_ms: int) -> None:
 
 
 async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
+    t0 = time.monotonic()
     start_ms = _parse_date_utc(args.start)
     end_ms = _parse_date_utc(args.end)
     validate_range(start_ms, end_ms)
@@ -59,6 +72,23 @@ async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
 
     summary = compute_summary(trade_records)
     write_trade_log_csv(trade_records, args.out)
+
+    closes = [r for r in trade_records if not r["is_partial"]]
+    equity_curve = downsample_equity([r["total_trade_net"] for r in closes])
+    git_info = git_commit_info()
+    meta = {
+        "start": args.start, "end": args.end, "balance": args.balance,
+        "spread_pct": args.spread_pct, "label": args.label, "out": args.out,
+        "git_commit": git_info["commit"], "git_dirty": git_info["dirty"],
+        "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "duration_seconds": round(time.monotonic() - t0, 1),
+        "format_version": 1,
+    }
+    dir_name = make_run_dir_name(datetime.now(timezone.utc), args.label)
+    run_dir = write_run(RUNS_DIR, dir_name, meta, summary, equity_curve, trade_records)
+    index_path = write_index(RUNS_DIR)
+    print(f"Run guardada en: {run_dir}")
+    print(f"Comparador: {index_path}")
     return summary
 
 

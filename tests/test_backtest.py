@@ -1,4 +1,6 @@
 import csv
+import json
+import os
 
 import pytest
 
@@ -27,12 +29,20 @@ def _reset_clock():
 @pytest.fixture(autouse=True)
 def _isolate_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr("backtest_feed.CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr("trade_cache.CACHE_DIR", str(tmp_path / "cache"))
+
+
+@pytest.fixture(autouse=True)
+def _isolate_runs_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr("backtest.RUNS_DIR", str(tmp_path / "runs"))
 
 
 _BASE_MS = 1_704_067_200_000  # 2024-01-01T00:00:00Z
+START = "2024-01-01"
+END = "2024-01-02"
 
 
-def test_main_runs_end_to_end_and_writes_a_csv(tmp_path):
+def _sample_day():
     klines_1m = [
         [_BASE_MS,          100.0, 102.0, 99.0,  101.0, 2.0],
         [_BASE_MS + 60_000, 101.0, 103.0, 100.0, 110.0, 3.0],
@@ -41,11 +51,16 @@ def test_main_runs_end_to_end_and_writes_a_csv(tmp_path):
         {"timestamp": _BASE_MS + 10_000, "price": 100.5, "amount": 1.0, "side": "buy"},
         {"timestamp": _BASE_MS + 70_000, "price": 109.0, "amount": 1.0, "side": "buy"},
     ]
+    return klines_1m, trades
+
+
+def test_main_runs_end_to_end_and_writes_a_csv(tmp_path):
+    klines_1m, trades = _sample_day()
     exchange = _FakeExchange(klines_1m, trades)
     out_path = tmp_path / "trades.csv"
 
     exit_code = backtest.main(
-        ["--start", "2024-01-01", "--end", "2024-01-02", "--out", str(out_path)],
+        ["--start", START, "--end", END, "--out", str(out_path)],
         exchange=exchange,
     )
 
@@ -54,6 +69,34 @@ def test_main_runs_end_to_end_and_writes_a_csv(tmp_path):
     with open(out_path, newline="") as f:
         rows = list(csv.DictReader(f))
     assert rows == []  # too little warm-up history for any entry signal to fire
+
+
+def test_run_creates_run_dir_with_meta_summary_and_index(tmp_path):
+    klines_1m, trades = _sample_day()
+    exchange = _FakeExchange(klines_1m, trades)
+    rc = backtest.main(
+        ["--start", START, "--end", END, "--out", str(tmp_path / "t.csv"), "--label", "Mi Prueba"],
+        exchange=exchange,
+    )
+    assert rc == 0
+    import backtest as bt
+    run_dirs = [d for d in os.listdir(bt.RUNS_DIR) if os.path.isdir(os.path.join(bt.RUNS_DIR, d))]
+    assert len(run_dirs) == 1
+    assert run_dirs[0].endswith("_mi-prueba")
+    run = os.path.join(bt.RUNS_DIR, run_dirs[0])
+    meta = json.load(open(os.path.join(run, "meta.json")))
+    assert meta["label"] == "Mi Prueba"
+    assert "git_commit" in meta and "start" in meta
+    assert os.path.exists(os.path.join(run, "summary.json"))
+    assert os.path.exists(os.path.join(run, "trades.csv"))
+    assert os.path.exists(os.path.join(bt.RUNS_DIR, "index.html"))
+
+
+def test_backtest_report_rebuild_index_cli(tmp_path, monkeypatch, capsys):
+    import backtest_report
+    rc = backtest_report.main_cli(["--rebuild-index", "--runs-dir", str(tmp_path)])
+    assert rc == 0
+    assert os.path.exists(os.path.join(str(tmp_path), "index.html"))
 
 
 def test_main_rejects_start_after_end():

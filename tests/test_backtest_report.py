@@ -1,8 +1,18 @@
 import csv
+import json
+import os
+from datetime import datetime, timezone
 
 import pytest
 
-from backtest_report import compute_summary, write_trade_log_csv
+from backtest_report import (
+    compute_summary,
+    downsample_equity,
+    git_commit_info,
+    make_run_dir_name,
+    write_run,
+    write_trade_log_csv,
+)
 from state import Side
 
 
@@ -100,3 +110,52 @@ def test_write_trade_log_csv_writes_header_only_for_empty_list(tmp_path):
         rows = list(csv.DictReader(f))
 
     assert rows == []
+
+
+def test_downsample_equity_empty_and_single():
+    assert downsample_equity([]) == []
+    assert downsample_equity([5.0]) == [[1, 5.0]]
+
+
+def test_downsample_equity_accumulates():
+    assert downsample_equity([1.0, -2.0, 3.0]) == [[1, 1.0], [2, -1.0], [3, 2.0]]
+
+
+def test_downsample_equity_caps_points_and_keeps_endpoints():
+    nets = [1.0] * 2000
+    points = downsample_equity(nets, max_points=500)
+    assert len(points) <= 500
+    assert points[0] == [1, 1.0]
+    assert points[-1] == [2000, 2000.0]
+
+
+def test_downsample_equity_rejects_max_points_below_two():
+    with pytest.raises(ValueError):
+        downsample_equity([1.0, 2.0], max_points=1)
+
+
+def test_git_commit_info_shape():
+    info = git_commit_info()
+    assert set(info) == {"commit", "dirty"}
+    assert isinstance(info["commit"], str) and isinstance(info["dirty"], bool)
+
+
+def test_make_run_dir_name_sanitizes_label():
+    dt = datetime(2026, 7, 3, 15, 30, 45, tzinfo=timezone.utc)
+    assert make_run_dir_name(dt, None) == "2026-07-03_15-30-45"
+    assert make_run_dir_name(dt, "Sin CVD/v2!") == "2026-07-03_15-30-45_sin-cvd-v2-"
+
+
+def test_write_run_creates_the_three_files(tmp_path):
+    meta = {"start": "2026-04-01", "label": None}
+    summary = {"total_trades": 1, "win_rate": 1.0, "total_net_pnl": 5.0,
+               "profit_factor": float("inf"), "max_drawdown": 0.0,
+               "max_consecutive_losses": 0}
+    run_dir = write_run(str(tmp_path), "2026-07-03_15-30-45", meta, summary, [[1, 5.0]], [])
+    assert json.load(open(os.path.join(run_dir, "meta.json")))["start"] == "2026-04-01"
+    data = json.load(open(os.path.join(run_dir, "summary.json")))
+    assert data["equity_curve"] == [[1, 5.0]]
+    assert data["final_equity"] == 5.0
+    assert data["metrics"]["total_trades"] == 1
+    assert data["metrics"]["profit_factor"] == "inf"
+    assert os.path.exists(os.path.join(run_dir, "trades.csv"))
