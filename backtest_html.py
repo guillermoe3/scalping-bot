@@ -65,7 +65,7 @@ def _fmt(value, spec: str = "") -> str:
     if value is None or value == "inf":
         return "∞" if value == "inf" else "—"
     try:
-        return format(value, spec) if spec else str(value)
+        return html.escape(format(value, spec) if spec else str(value))
     except (TypeError, ValueError):
         return html.escape(str(value))
 

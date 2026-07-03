@@ -57,6 +57,14 @@ def test_render_index_escapes_labels(tmp_path):
     assert "<script>alert(1)" not in render_index(runs, [])
 
 
+def test_render_index_escapes_string_metrics(tmp_path):
+    _make_run(str(tmp_path), "2026-07-01_10-00-00")
+    runs, _ = collect_runs(str(tmp_path))
+    runs[0]["summary"]["metrics"]["total_trades"] = "<img src=x onerror=alert(1)>"
+    html_out = render_index(runs, [])
+    assert "<img src=x" not in html_out
+
+
 def test_write_index_creates_file(tmp_path):
     _make_run(str(tmp_path), "2026-07-01_10-00-00")
     path = write_index(str(tmp_path))
