@@ -133,3 +133,23 @@ def write_run(base_dir: str, dir_name: str, meta: dict, summary: dict,
         json.dump(payload, f, indent=2)
     write_trade_log_csv(trade_records, os.path.join(run_dir, "trades.csv"))
     return run_dir
+
+
+def main_cli(argv=None) -> int:
+    import argparse
+
+    from backtest_html import write_index
+
+    parser = argparse.ArgumentParser(description="Backtest report utilities.")
+    parser.add_argument("--rebuild-index", action="store_true")
+    parser.add_argument("--runs-dir", default="backtest_runs")
+    args = parser.parse_args(argv)
+    if args.rebuild_index:
+        print(write_index(args.runs_dir))
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main_cli())
