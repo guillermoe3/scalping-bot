@@ -154,7 +154,15 @@ class ExecutionEngine:
                 logger.exception("fetch_order failed for pending entry %s", pending.order_id)
                 return
             if order.get("status") == "closed":
-                filled = float(order.get("filled") or pending.plan.size)
+                filled_raw = order.get("filled")
+                filled = float(filled_raw) if filled_raw is not None else pending.plan.size
+                if filled <= 0:
+                    self._pending_entry = None
+                    logger.warning(
+                        "Entry order %s closed with zero fill — no position opened",
+                        pending.order_id,
+                    )
+                    return
                 avg = float(order.get("average") or pending.plan.price)
                 self._fill_pending(replace(pending.plan, size=filled, price=avg))
             return

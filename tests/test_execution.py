@@ -364,6 +364,21 @@ def test_live_fill_uses_exchange_filled_size_and_average_price(monkeypatch):
     assert pos.fees_paid == pytest.approx(filled * avg_price * MAKER_FEE_RATE)
 
 
+def test_live_zero_fill_closed_order_does_not_open_position(monkeypatch):
+    """An exchange-reported {'status': 'closed', 'filled': 0.0} (e.g. STP kill)
+    must not open a synthetic full position — pending entry should be cleared."""
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine, fake = _live_engine(state, monkeypatch)
+    asyncio.run(engine.enter(Side.LONG))
+    fake.order_status = {"status": "closed", "filled": 0.0, "average": 98.5}
+    engine._last_fill_poll = 0.0  # force the next poll
+
+    asyncio.run(engine.check_pending_entry())
+
+    assert state.position is None
+    assert not engine.has_pending_entry
+
+
 def test_cancel_open_orders_calls_cancel_all(monkeypatch):
     state = _state_with_book()
     engine, fake = _live_engine(state, monkeypatch)
