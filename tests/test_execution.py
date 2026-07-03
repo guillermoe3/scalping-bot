@@ -343,10 +343,31 @@ def test_live_timeout_cancels_and_keeps_partial_fill(monkeypatch):
     assert state.position.size == pytest.approx(planned_size / 2, rel=1e-4)
 
 
+def test_live_fill_uses_exchange_filled_size_and_average_price(monkeypatch):
+    """Exchange-reported filled/average must override the plan's size/price."""
+    state = _state_with_book(bid=99.0, ask=101.0)
+    engine, fake = _live_engine(state, monkeypatch)
+    asyncio.run(engine.enter(Side.LONG))
+    planned_size = engine._pending_entry.plan.size
+    # Exchange reports a partial fill at a slightly different average price
+    filled = round(planned_size * 0.7, 6)
+    avg_price = 98.5  # differs from plan price of 99.0
+    fake.order_status = {"status": "closed", "filled": filled, "average": avg_price}
+    engine._last_fill_poll = 0.0  # force the next poll
+
+    asyncio.run(engine.check_pending_entry())
+
+    pos = state.position
+    assert pos is not None
+    assert pos.size == pytest.approx(filled)
+    assert pos.entry_price == pytest.approx(avg_price)
+    assert pos.fees_paid == pytest.approx(filled * avg_price * MAKER_FEE_RATE)
+
+
 def test_cancel_open_orders_calls_cancel_all(monkeypatch):
     state = _state_with_book()
     engine, fake = _live_engine(state, monkeypatch)
 
-    engine.cancel_open_orders()
+    asyncio.run(engine.cancel_open_orders())
 
     assert fake.cancel_all_calls == ["BTC/USDT"]

@@ -257,6 +257,7 @@ def test_plan_entry_returns_none_when_atr_is_zero():
 def test_open_planned_applies_the_given_fee_rate():
     state = MarketState()
     state.atr = 2.0
+    state.volume_velocity = 3.5
     plan = plan_entry(state, Side.LONG, 100.0, balance=10_000.0)
 
     open_planned(state, plan, fee_rate=MAKER_FEE_RATE)
@@ -266,6 +267,8 @@ def test_open_planned_applies_the_given_fee_rate():
     assert pos.entry_price == pytest.approx(100.0)
     assert pos.fees_paid == pytest.approx(plan.size * 100.0 * MAKER_FEE_RATE)
     assert state.pnl_today == pytest.approx(-pos.fees_paid)
+    assert pos.realized_pnl == pytest.approx(-pos.fees_paid)
+    assert state.prior_volume_velocity == pytest.approx(3.5)
 
 
 def test_open_position_wrapper_still_charges_taker_fee():

@@ -8,7 +8,7 @@ from typing import Callable, Optional
 
 import clock
 from config import ENTRY_ORDER_TIMEOUT_SECONDS, MAKER_FEE_RATE
-from risk import EntryPlan, apply_partial_close, close_position, manage_position, open_planned, open_position, plan_entry
+from risk import EntryPlan, apply_partial_close, close_position, manage_position, open_planned, plan_entry
 from state import MarketState, Side
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,9 @@ class ExecutionEngine:
                 logger.exception("fetch_order failed for pending entry %s", pending.order_id)
                 return
             if order.get("status") == "closed":
-                self._fill_pending(pending.plan)
+                filled = float(order.get("filled") or pending.plan.size)
+                avg = float(order.get("average") or pending.plan.price)
+                self._fill_pending(replace(pending.plan, size=filled, price=avg))
             return
 
         # Paper/backtest fill model: fill only when a trade prints strictly THROUGH
@@ -188,12 +190,14 @@ class ExecutionEngine:
         else:
             logger.info("Entry order timed out unfilled — cancelled on exchange")
 
-    def cancel_open_orders(self) -> None:
+    async def cancel_open_orders(self) -> None:
         """Startup hygiene: a crash can leave an orphan resting entry on the exchange."""
         if self._exchange is None:
             return
         try:
-            self._exchange.cancel_all_orders("BTC/USDT")
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._exchange.cancel_all_orders("BTC/USDT"),
+            )
             logger.info("Startup: cancelled all open BTC/USDT orders")
         except Exception:
             logger.exception("Startup cancel_all_orders failed")
