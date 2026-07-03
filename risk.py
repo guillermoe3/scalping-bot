@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 import clock
@@ -46,12 +47,23 @@ def _compute_levels(side: Side, entry: float, atr: float) -> tuple[float, float]
 
 # --- Open / close ---
 
-def open_position(
+@dataclass
+class EntryPlan:
+    """Sizing and levels computed at order placement time; consumed at fill time."""
+    side: Side
+    price: float
+    size: float
+    stop_loss: float
+    tp1: float
+    atr: float
+
+
+def plan_entry(
     state: MarketState,
     side: Side,
     price: float,
     balance: Optional[float] = None,
-) -> None:
+) -> Optional[EntryPlan]:
     if balance is None:
         balance = (
             state.daily_starting_balance
@@ -60,17 +72,23 @@ def open_position(
         )
     stop_loss, tp1 = _compute_levels(side, price, state.atr)
     size = _compute_size(price, stop_loss, balance)
-    sl_dist = abs(price - stop_loss)
-    entry_fee = size * price * TAKER_FEE_RATE
+    if size <= 0:
+        return None
+    return EntryPlan(side=side, price=price, size=size, stop_loss=stop_loss, tp1=tp1, atr=state.atr)
+
+
+def open_planned(state: MarketState, plan: EntryPlan, fee_rate: float = TAKER_FEE_RATE) -> None:
+    sl_dist = abs(plan.price - plan.stop_loss)
+    entry_fee = plan.size * plan.price * fee_rate
 
     state.position = Position(
-        side=side,
-        entry_price=price,
-        size=size,
+        side=plan.side,
+        entry_price=plan.price,
+        size=plan.size,
         entry_time=clock.now(),
-        stop_loss=stop_loss,
-        tp1=tp1,
-        initial_atr=state.atr,
+        stop_loss=plan.stop_loss,
+        tp1=plan.tp1,
+        initial_atr=plan.atr,
         initial_sl_distance=sl_dist,
         fees_paid=entry_fee,
         realized_pnl=-entry_fee,
@@ -80,9 +98,22 @@ def open_position(
 
     logger.info(
         "OPEN %s @ %.2f | SL=%.2f | TP1=%.2f | size=%.6f BTC | risk=$%.2f | entry_fee=$%.2f",
-        side.value.upper(), price, stop_loss, tp1, size, size * sl_dist, entry_fee,
+        plan.side.value.upper(), plan.price, plan.stop_loss, plan.tp1,
+        plan.size, plan.size * sl_dist, entry_fee,
     )
     safety.save_state(state)
+
+
+def open_position(
+    state: MarketState,
+    side: Side,
+    price: float,
+    balance: Optional[float] = None,
+) -> None:
+    plan = plan_entry(state, side, price, balance)
+    if plan is None:
+        return
+    open_planned(state, plan, fee_rate=TAKER_FEE_RATE)
 
 
 def close_position(state: MarketState, price: float, reason: str) -> float:
@@ -171,7 +202,7 @@ def _apply_structural_trail(state: MarketState) -> None:
     if pos is None:
         return
 
-    highs, lows = detect_swing_points(state.candles_1m, lookback=3)
+    highs, lows = detect_swing_points(state.candles_15m, lookback=3)
 
     if pos.side == Side.LONG and lows:
         # Trail behind the highest recent swing low that is above our original SL

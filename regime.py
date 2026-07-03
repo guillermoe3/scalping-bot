@@ -49,8 +49,8 @@ def _has_liquidity_sweeps_at_both_extremes(candles: deque, lookback: int = RANGE
 
 
 def _ema_is_sloping(state: MarketState, atr: float) -> bool:
-    """True if the 1m EMA has drifted more than 0.15 ATR vs 10 candles ago."""
-    c_list = list(state.candles_1m)
+    """True if the 15m EMA has drifted more than 0.15 ATR vs 10 candles ago."""
+    c_list = list(state.candles_15m)
     if len(c_list) < 10 or state.ema <= 0:
         return False
     older_close = c_list[-10].close
@@ -60,7 +60,7 @@ def _ema_is_sloping(state: MarketState, atr: float) -> bool:
 # --- Candidate regime inference ---
 
 def _infer_candidate(state: MarketState) -> Regime:
-    c_list = list(state.candles_1m)
+    c_list = list(state.candles_15m)
     if len(c_list) < 5 or state.atr <= 0:
         return Regime.UNKNOWN
 
@@ -74,7 +74,7 @@ def _infer_candidate(state: MarketState) -> Regime:
 
     if tight_count >= 3:
         sloping = _ema_is_sloping(state, state.atr)
-        swept = _has_liquidity_sweeps_at_both_extremes(state.candles_1m)
+        swept = _has_liquidity_sweeps_at_both_extremes(state.candles_15m)
 
         if swept and not sloping:
             return Regime.TRADING_RANGE
@@ -92,7 +92,7 @@ def update_regime(state: MarketState) -> None:
     consecutive candles before a transition is committed.
     UNKNOWN candidates are ignored — regime is never downgraded by noise.
     """
-    if len(state.candles_1m) < 10:
+    if len(state.candles_15m) < 10:
         return
 
     candidate = _infer_candidate(state)
@@ -117,23 +117,15 @@ def update_regime(state: MarketState) -> None:
         state.regime_confirm_count = 1
 
 
-# --- MTF trend bias ---
+# --- Higher-timeframe trend bias ---
 
-def update_mtf_trend(state: MarketState) -> None:
-    """Set 15m and 5m trend bias from EMA relationship to current price."""
+def update_trend_1h(state: MarketState) -> None:
+    """Set the 1h-equivalent trend bias from price vs the EMA-80-on-15m,
+    with a +-0.05% deadband to avoid flip-flopping at the EMA."""
     p = state.last_price
-    if p <= 0:
+    if p <= 0 or state.ema_1h <= 0:
         return
-
-    if state.ema_15m > 0:
-        if p > state.ema_15m * 1.0005:
-            state.trend_15m = Side.LONG
-        elif p < state.ema_15m * 0.9995:
-            state.trend_15m = Side.SHORT
-        # else: leave unchanged to avoid flip-flopping at the EMA
-
-    if state.ema_5m > 0:
-        if p > state.ema_5m * 1.0003:
-            state.trend_5m = Side.LONG
-        elif p < state.ema_5m * 0.9997:
-            state.trend_5m = Side.SHORT
+    if p > state.ema_1h * 1.0005:
+        state.trend_1h = Side.LONG
+    elif p < state.ema_1h * 0.9995:
+        state.trend_1h = Side.SHORT

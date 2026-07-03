@@ -104,9 +104,8 @@ class MarketState:
 
     # Adaptive indicators
     atr: float = 0.0
-    ema: float = 0.0       # 1m EMA, period varies by regime
-    ema_5m: float = 0.0
-    ema_15m: float = 0.0
+    ema: float = 0.0       # signal-timeframe (15m) EMA, period varies by regime
+    ema_1h: float = 0.0    # EMA-80 over 15m closes ~ 1h EMA-20
 
     # Regime state machine
     regime: Regime = Regime.UNKNOWN
@@ -134,9 +133,8 @@ class MarketState:
     volume_velocity: float = 0.0        # BTC/sec in current candle
     prior_volume_velocity: float = 0.0  # velocity at position entry
 
-    # Multi-timeframe trend bias
-    trend_15m: Optional[Side] = None
-    trend_5m: Optional[Side] = None
+    # Higher-timeframe trend bias
+    trend_1h: Optional[Side] = None
 
     # Macro context gates
     macro_blocks_longs: bool = False

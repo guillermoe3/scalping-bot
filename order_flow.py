@@ -26,7 +26,7 @@ def detect_cvd_divergence(state: MarketState) -> Optional[str]:
 
     Uses the last CVD_DIVERGENCE_LOOKBACK closed candles.
     """
-    candles = list(state.candles_1m)
+    candles = list(state.candles_15m)
     cvds = list(state.cvd_per_candle)
     n = min(CVD_DIVERGENCE_LOOKBACK, len(candles), len(cvds))
     if n < 3:

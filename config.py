@@ -45,13 +45,12 @@ BREAKEVEN_ATR_TRIGGER = 0.8   # move stop to breakeven after 0.8 ATR profit
 ATR_BREATHING_THRESHOLD = 1.2 # expand SL if live ATR grows 20%+ vs entry ATR
 PAPER_BALANCE_USDT = 10_000.0  # paper-mode balance; LIVE mode overrides this daily (see safety.py)
 
-# Time-based exits
-TIME_EXIT_MINUTES = 15
-MOMENTUM_ABORT_MINUTES = 3    # early abort if momentum collapses by minute 3
+# Time-based exits (minutes; the signal clock is the 15m candle close)
+TIME_EXIT_MINUTES = 225       # 15 bars of 15m
+MOMENTUM_ABORT_MINUTES = 45   # 3 bars of 15m
 
-# MTF EMA periods
-TREND_EMA_5M = 12
-TREND_EMA_15M = 20
+# Higher-timeframe trend filter: EMA over 15m closes approximating a 20-period 1h EMA
+TREND_EMA_1H_ON_15M = 80
 
 # Macro / context filter
 CORRELATION_BLOCK_THRESHOLD = 0.8  # block longs if BTC-SPY correlation > this
@@ -71,10 +70,12 @@ KILL_SWITCH_CONSECUTIVE_LOSSES = 3      # 3 losing trades in a row halts new ent
 STATE_FILE_PATH = "safety_state.json"
 
 # Fees
+MAKER_FEE_RATE = 0.0002   # 0.02% per side, Binance Futures USDT-M maker, no BNB discount
 TAKER_FEE_RATE = 0.0005   # 0.05% per side, Binance Futures USDT-M, no BNB discount
+ENTRY_ORDER_TIMEOUT_SECONDS = 300  # cancel an unfilled post-only entry after 5 min (1/3 of a 15m bar)
 
 # Spread filter
-SPREAD_FILTER_ATR_PCT = 0.05  # block entries when spread > 5% of 1m ATR
+SPREAD_FILTER_ATR_PCT = 0.01  # block entries when spread > 1% of 15m ATR (~5.5x the old 1m ATR)
 
 # Backtesting
-BACKTEST_SYNTHETIC_SPREAD_PCT = 0.0001  # 0.01% of price per side — no real historical order book data exists
+BACKTEST_SYNTHETIC_SPREAD_PCT = 0.00001  # 0.001% of price per side (~10x the typical real BTCUSDT futures spread); must stay well below SPREAD_FILTER_ATR_PCT * typical 15m ATR% or the spread gate blocks every backtest entry
