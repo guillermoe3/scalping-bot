@@ -75,6 +75,8 @@ def write_trade_log_csv(trade_records: List[dict], path: str) -> None:
 
 
 def downsample_equity(nets: List[float], max_points: int = 500) -> List[list]:
+    if max_points < 2:
+        raise ValueError("max_points must be >= 2")
     points: List[list] = []
     equity = 0.0
     for i, n in enumerate(nets, start=1):

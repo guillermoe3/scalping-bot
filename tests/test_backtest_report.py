@@ -129,6 +129,11 @@ def test_downsample_equity_caps_points_and_keeps_endpoints():
     assert points[-1] == [2000, 2000.0]
 
 
+def test_downsample_equity_rejects_max_points_below_two():
+    with pytest.raises(ValueError):
+        downsample_equity([1.0, 2.0], max_points=1)
+
+
 def test_git_commit_info_shape():
     info = git_commit_info()
     assert set(info) == {"commit", "dirty"}
@@ -152,4 +157,5 @@ def test_write_run_creates_the_three_files(tmp_path):
     assert data["equity_curve"] == [[1, 5.0]]
     assert data["final_equity"] == 5.0
     assert data["metrics"]["total_trades"] == 1
+    assert data["metrics"]["profit_factor"] == "inf"
     assert os.path.exists(os.path.join(run_dir, "trades.csv"))
