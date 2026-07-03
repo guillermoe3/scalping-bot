@@ -126,3 +126,8 @@ def test_main_returns_one_when_a_day_fails(monkeypatch):
         raise OSError("down")
     rc = main(["--start", "2026-04-01", "--end", "2026-04-02"], fetcher=fetcher)
     assert rc == 1
+
+
+def test_download_day_garbage_payload_is_failed_not_crash():
+    status = download_day("2026-04-01", fetcher=lambda url: b"not a zip", sleep=lambda s: None)
+    assert status == "failed"

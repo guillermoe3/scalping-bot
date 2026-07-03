@@ -63,32 +63,32 @@ def _http_get(url: str) -> bytes:
         raise
 
 
-def download_day(day: str, fetcher=None, sleep=time.sleep) -> str:
+def download_day(day: str, fetcher=None, sleep=None) -> str:
     """Baja, convierte y cachea un día. Procesa de a un día por vez para
     mantener acotada la memoria (lección del OOM: nunca más de un día de
-    trades en RAM)."""
+    trades en RAM). El fetch, el unzip/parse y la escritura en cache viven
+    todos dentro del try por intento: un payload corrupto (descarga
+    truncada, página de error) consume un intento y se reintenta en vez de
+    abortar todo el batch."""
     if trade_cache.has_day(day):
         return "cached"
     fetch = fetcher if fetcher is not None else _http_get
+    _sleep = sleep if sleep is not None else time.sleep
 
-    payload = None
     for attempt in range(_MAX_ATTEMPTS):
         try:
             payload = fetch(build_url(day))
-            break
+            with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+                with zf.open(zf.namelist()[0]) as f:
+                    rows = parse_agg_trades_csv(io.TextIOWrapper(f, encoding="utf-8", newline=""))
+            trade_cache.write_day(day, rows)
+            return "downloaded"
         except DayNotAvailable:
             return "missing"
         except Exception:
             if attempt < _MAX_ATTEMPTS - 1:
-                sleep(2 ** attempt)
-    if payload is None:
-        return "failed"
-
-    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
-        with zf.open(zf.namelist()[0]) as f:
-            rows = parse_agg_trades_csv(io.TextIOWrapper(f, encoding="utf-8", newline=""))
-    trade_cache.write_day(day, rows)
-    return "downloaded"
+                _sleep(2 ** attempt)
+    return "failed"
 
 
 def _iter_days(start: str, end: str):
