@@ -165,12 +165,35 @@ comportamiento real del bot en vivo (2 gates inertes en simulación).
 
 ---
 
-## 6. Estado (2026-07-02)
+## 6. Estado (2026-07-03)
 
 Implementado el pivot de estructura de costos (P0-2 y P0-4 de la sección 4): señal
 movida de 1m a 15m y entradas convertidas a maker post-only con timeout
 (plan: `docs/superpowers/plans/2026-07-02-pivot-senal-15m-entradas-maker.md`).
 Fee drag por round-trip esperado: de ~1.30R a ~0.17R (entrada maker + salidas taker,
-ATR% p50 de 15m medido en 0.280%). Siguen pendientes: cost gate explícito (P0-3),
-ablation de gates (P0-8), ampliación del histórico (P0-6) y persistencia de
-resultados (P0-7).
+ATR% p50 de 15m medido en 0.280%).
+
+**P0-6 y P0-7 implementados** (2026-07-03, plan:
+`docs/superpowers/plans/2026-07-03-backtest-persistencia-historico.md`, spec:
+`docs/superpowers/specs/2026-07-03-backtest-persistencia-historico-design.md`):
+
+- **P0-6:** `download_history.py` baja los dumps diarios oficiales de
+  data.binance.vision a un cache compacto por día (`trade_cache.py`, ~6 MB/día
+  vs ~450 MB del JSON viejo). Hay 91 días cacheados (2026-04-01 → 2026-07-01).
+  Al migrar se descubrió que el cache viejo por REST **perdía 0.4-0.75% de los
+  trades** (paginación `since = last_ts + 1` saltea trades del mismo ms en el
+  borde de página); se verificó fila por fila que el viejo era subconjunto
+  estricto del nuevo antes de borrarlo.
+- **P0-7:** cada corrida de backtest persiste `meta.json` (parámetros + commit
+  git) + `summary.json` (métricas + curva de equity) + `trades.csv` en
+  `backtest_runs/<timestamp>_<label>/`, con flag `--label`, y regenera un
+  comparador HTML autocontenido (`backtest_runs/index.html`,
+  `backtest_report.py --rebuild-index` para reconstruirlo).
+- Smoke de 3 meses (abr-jun 2026): corre en ~11 min, pico de RAM 2.2 GB
+  (chunked por día, sin OOM). **Resultado: 0 trades en 91 días** — la señal
+  actual (squeeze 15m + 10 gates en AND) no disparó ni una vez en todo el
+  trimestre. Ese hallazgo refuerza la urgencia del ablation: hoy no se sabe
+  qué gate (o combinación) está vetando todo.
+
+Siguen pendientes: cost gate explícito (P0-3) y ablation de gates (P0-8),
+ahora desbloqueado por la base de P0-6/P0-7.
