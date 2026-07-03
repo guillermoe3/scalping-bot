@@ -197,3 +197,19 @@ ATR% p50 de 15m medido en 0.280%).
 
 Siguen pendientes: cost gate explícito (P0-3) y ablation de gates (P0-8),
 ahora desbloqueado por la base de P0-6/P0-7.
+
+**Diagnóstico + sweep de umbrales de squeeze (2026-07-03, corridas
+persistidas en `backtest_runs/`, comparables en `index.html`):** el 0-trades
+se explica porque los parámetros de squeeze quedaron calibrados para velas
+de 1m: en 15m la compresión `range ≤ 0.4·ATR` pasa solo el 3.5% de las velas
+(p10 de range/ATR = 0.50) y exigir 3 seguidas deja ~2 velas candidatas por
+trimestre. Se corrió un sweep de 7 variantes (`SQUEEZE_COMPRESSION_ATR`
+0.4-0.7 × `SQUEEZE_MIN_BARS` 2-3) sobre abr-jun 2026. **Todas pierden, y el
+win rate cae al abrir el embudo** (25 trades → 20% aciertos, -$168; 79 →
+13%, -$848; 173 → 10%, -$1.715; profit factor 0.16-0.39 en todos los
+casos). Conclusión: la dirección del modelo de entrada fade/pre-break es
+anti-predictiva en 15m — ninguna calibración lo salva. Esto convierte a la
+**decisión N1** (tercera opinión: asumir el fade con tipo de nivel
+trackeado vs. pasar a entrada por confirmación de ruptura) en el bloqueante
+único previo a cualquier otro trabajo de señal. El ablation P0-8 debe
+correrse para la variante que se elija en N1, no para la actual.
