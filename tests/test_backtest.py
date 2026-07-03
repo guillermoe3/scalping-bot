@@ -27,6 +27,7 @@ def _reset_clock():
 @pytest.fixture(autouse=True)
 def _isolate_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr("backtest_feed.CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr("trade_cache.CACHE_DIR", str(tmp_path / "cache"))
 
 
 _BASE_MS = 1_704_067_200_000  # 2024-01-01T00:00:00Z

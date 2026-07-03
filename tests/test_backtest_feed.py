@@ -28,6 +28,7 @@ class _FakeExchange:
 @pytest.fixture(autouse=True)
 def _isolate_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(backtest_feed, "CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr("trade_cache.CACHE_DIR", str(tmp_path / "cache"))
 
 
 def test_fetch_klines_1m_returns_klines_within_range():
@@ -429,3 +430,55 @@ def test_replay_raises_a_clear_error_when_no_klines_are_available():
 
     with pytest.raises(ValueError, match="No historical data available"):
         asyncio.run(feed.replay(start_ms=0, end_ms=60_000))
+
+
+import trade_cache
+from backtest_feed import find_missing_days
+
+DAY_MS = backtest_feed.DAY_MS
+DAY0 = 1775001600000  # 2026-04-01 00:00 UTC
+
+
+def test_fetch_trades_prefers_compact_cache_over_exchange():
+    trade_cache.write_day("2026-04-01", [[DAY0 + 1000, 50000.0, 0.5, True]])
+    exchange = _FakeExchange(trades=[])
+    result = fetch_trades(exchange, "BTC/USDT", DAY0, DAY0 + DAY_MS)
+    assert exchange.fetch_trades_calls == 0
+    assert result == [{"timestamp": DAY0 + 1000, "price": 50000.0, "amount": 0.5, "side": "sell"}]
+
+
+def test_fetch_trades_compact_filters_to_requested_range():
+    trade_cache.write_day("2026-04-01", [
+        [DAY0 + 1000, 50000.0, 0.5, True],
+        [DAY0 + 7_200_000, 50001.0, 0.1, False],
+    ])
+    result = fetch_trades(None, "BTC/USDT", DAY0, DAY0 + 3_600_000)
+    assert len(result) == 1
+
+
+def test_fetch_trades_falls_back_to_rest_with_warning(capsys):
+    trades = [{"timestamp": DAY0 + 1, "price": 1.0, "amount": 1.0, "side": "buy"}]
+    exchange = _FakeExchange(trades=trades)
+    result = fetch_trades(exchange, "BTC/USDT", DAY0, DAY0 + 5000)
+    assert exchange.fetch_trades_calls >= 1
+    assert "download_history.py" in capsys.readouterr().err
+
+
+def test_find_missing_days_reports_uncached_days():
+    trade_cache.write_day("2026-04-02", [[DAY0 + DAY_MS + 1, 1.0, 1.0, False]])
+    missing = find_missing_days(DAY0, DAY0 + 3 * DAY_MS)
+    assert missing == ["2026-04-01", "2026-04-03"]
+
+
+def test_replay_strict_raises_when_many_days_missing():
+    feed = BacktestFeed.__new__(BacktestFeed)  # sin __init__: no crear exchange real
+    feed._strict_cache = True
+    with pytest.raises(ValueError) as exc:
+        asyncio.run(feed.replay(DAY0, DAY0 + 4 * DAY_MS))
+    assert "2026-04-01" in str(exc.value)
+    assert "download_history.py" in str(exc.value)
+
+
+def test_injected_exchange_disables_strict_cache():
+    feed = BacktestFeed(MarketState(), exchange=_FakeExchange())
+    assert feed._strict_cache is False

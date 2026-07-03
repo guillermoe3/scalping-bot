@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from typing import Awaitable, Callable, List, Optional
 
 import clock
+import trade_cache
 from config import BACKTEST_SYNTHETIC_SPREAD_PCT
 from data_feed import update_live_candles
 from state import Candle, MarketState
@@ -79,13 +81,56 @@ def fetch_klines_1m(exchange, symbol: str, start_ms: int, end_ms: int, use_cache
     return candles
 
 
+def _single_day_key(start_ms: int, end_ms: int) -> Optional[str]:
+    """If [start_ms, end_ms) falls within a single UTC day, returns its
+    'YYYY-MM-DD'; if it crosses midnight returns None (replay is already
+    chunked per day, so the normal case is a single day)."""
+    day_start = (start_ms // DAY_MS) * DAY_MS
+    if end_ms > day_start + DAY_MS:
+        return None
+    return trade_cache.day_str(start_ms)
+
+
+def _compact_to_ccxt(rows: List[list], start_ms: int, end_ms: int) -> List[dict]:
+    return [
+        {"timestamp": ts, "price": price, "amount": qty, "side": "sell" if is_sell else "buy"}
+        for ts, price, qty, is_sell in rows
+        if start_ms <= ts < end_ms
+    ]
+
+
+def find_missing_days(start_ms: int, end_ms: int) -> List[str]:
+    missing: List[str] = []
+    for chunk_start, chunk_end in _day_chunks(start_ms, end_ms):
+        day = trade_cache.day_str(chunk_start)
+        if trade_cache.has_day(day):
+            continue
+        if os.path.exists(_cache_path("BTC/USDT", "trades", chunk_start, chunk_end)):
+            continue
+        missing.append(day)
+    return missing
+
+
 def fetch_trades(exchange, symbol: str, start_ms: int, end_ms: int, use_cache: bool = True) -> List[dict]:
     """Returns ccxt-normalized trade dicts covering [start_ms, end_ms)."""
+    if use_cache:
+        day = _single_day_key(start_ms, end_ms)
+        if day is not None:
+            rows = trade_cache.read_day(day)
+            if rows is not None:
+                return _compact_to_ccxt(rows, start_ms, end_ms)
+
     path = _cache_path(symbol, "trades", start_ms, end_ms)
     if use_cache:
         cached = _read_cache(path)
         if cached is not None:
             return cached
+        print(
+            f"[backtest] sin cache compacto para {trade_cache.day_str(start_ms)}; "
+            f"bajando por REST (lento). Sugerido: python download_history.py "
+            f"--start {trade_cache.day_str(start_ms)} --end <dia siguiente al ultimo>",
+            file=sys.stderr,
+        )
 
     trades: List[dict] = []
     since = start_ms
@@ -169,6 +214,7 @@ class BacktestFeed:
         use_cache: bool = True,
     ) -> None:
         self.state = state
+        self._strict_cache = exchange is None
         self._exchange = exchange if exchange is not None else _build_exchange()
         self._spread_pct = spread_pct
         self._use_cache = use_cache
@@ -193,6 +239,15 @@ class BacktestFeed:
         self._candle_15m_handlers.append(fn)
 
     async def replay(self, start_ms: int, end_ms: int) -> None:
+        if self._strict_cache:
+            missing = find_missing_days(start_ms, end_ms)
+            if len(missing) > 2:
+                first, last = missing[0], missing[-1]
+                raise ValueError(
+                    f"Faltan {len(missing)} dias de trades en cache: {', '.join(missing)}. "
+                    f"Correr: python download_history.py --start {first} --end {last} "
+                    f"(--end es exclusivo: usar el dia siguiente a {last})"
+                )
         for chunk_start, chunk_end in _day_chunks(start_ms, end_ms):
             await self._replay_chunk(chunk_start, chunk_end)
 
