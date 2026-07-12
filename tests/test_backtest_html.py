@@ -4,7 +4,7 @@ import os
 from backtest_html import collect_runs, render_index, write_index
 
 
-def _make_run(base, name, pnl=10.0, corrupt=False):
+def _make_run(base, name, pnl=10.0, corrupt=False, gate_vetoes=None):
     d = os.path.join(base, name)
     os.makedirs(d)
     if corrupt:
@@ -13,9 +13,12 @@ def _make_run(base, name, pnl=10.0, corrupt=False):
     json.dump({"start": "2026-04-01", "end": "2026-07-01", "label": "base",
                "git_commit": "abc1234", "created_utc": "2026-07-03T15:30:45Z"},
               open(os.path.join(d, "meta.json"), "w"))
-    json.dump({"metrics": {"total_trades": 3, "win_rate": 0.66, "total_net_pnl": pnl,
-                           "profit_factor": 2.0, "max_drawdown": 1.0,
-                           "max_consecutive_losses": 1},
+    metrics = {"total_trades": 3, "win_rate": 0.66, "total_net_pnl": pnl,
+               "profit_factor": 2.0, "max_drawdown": 1.0,
+               "max_consecutive_losses": 1}
+    if gate_vetoes is not None:
+        metrics["gate_vetoes"] = gate_vetoes
+    json.dump({"metrics": metrics,
                "equity_curve": [[1, 4.0], [2, -1.0], [3, pnl]],
                "final_equity": pnl},
               open(os.path.join(d, "summary.json"), "w"))
@@ -70,3 +73,23 @@ def test_write_index_creates_file(tmp_path):
     path = write_index(str(tmp_path))
     assert path.endswith("index.html")
     assert os.path.exists(path)
+
+
+def test_index_renders_gate_vetoes_sorted_desc(tmp_path):
+    _make_run(str(tmp_path), "2026-07-12_10-00-00",
+              gate_vetoes={"trend_1h": 12, "cvd": 3, "spread": 0})
+
+    write_index(str(tmp_path))
+    html_text = open(os.path.join(str(tmp_path), "index.html")).read()
+
+    assert "trend_1h:12 cvd:3" in html_text  # orden descendente, los ceros no aparecen
+    assert "Vetos" in html_text
+
+
+def test_index_tolerates_runs_without_gate_vetoes(tmp_path):
+    _make_run(str(tmp_path), "2026-07-12_10-00-00")  # formato viejo, sin la clave
+
+    write_index(str(tmp_path))
+    html_text = open(os.path.join(str(tmp_path), "index.html")).read()
+
+    assert "Vetos" in html_text  # la columna existe igual; la celda rinde "—"
