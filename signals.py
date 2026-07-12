@@ -34,14 +34,30 @@ def _nearest_key_level(price: float, state: MarketState) -> Tuple[float, float, 
 
 # --- Squeeze detection (Volman compression model) ---
 
+# Entry model variant: "fade" (bet on level rejection, pre-break) or "break"
+# (enter on confirmed break of the squeeze level). Backtest overrides this;
+# live default stays "fade".
+ENTRY_VARIANT = "fade"
+
+
+def _clear_broken(state: MarketState) -> None:
+    state.squeeze_broken = False
+    state.squeeze_broken_direction = None
+    state.squeeze_broken_level = 0.0
+    state.squeeze_broken_ttl = 0
+
+
 def update_squeeze(state: MarketState) -> None:
     """
     Detect Volman-style "The Squeeze": price compressing in a tight range
-    AGAINST a key support/resistance level, indicating absorption.
+    against a key support/resistance level, and track its resolution.
 
-    squeeze_direction tells us which way the decompression breakout is expected:
-      - Price below the level → squeeze against resistance → SHORT on break
-      - Price above the level → squeeze against support → LONG on break
+    Two downstream consumers:
+      - fade variant: squeeze_direction is the bounce off the level's kind
+        (support → LONG, resistance → SHORT); incoherent kind → no thesis.
+      - break variant: when an armed squeeze closes across its reference
+        level, squeeze_broken opens a 2-bar entry window in the break's
+        real direction.
     """
     if state.atr <= 0:
         return
@@ -51,8 +67,27 @@ def update_squeeze(state: MarketState) -> None:
         return
 
     latest = candles[-1]
-    is_compressed = latest.range <= SQUEEZE_COMPRESSION_ATR * state.atr
 
+    # Age out a previous break window (decrement happens on every close
+    # AFTER the detection candle; the window covers closes N and N+1).
+    if state.squeeze_broken:
+        state.squeeze_broken_ttl -= 1
+        if state.squeeze_broken_ttl <= 0:
+            _clear_broken(state)
+
+    # Break detection must run BEFORE the compression reset wipes the
+    # armed squeeze — the breakout candle is by definition not compressed.
+    if state.in_squeeze and state.squeeze_reference_level > 0:
+        level = state.squeeze_reference_level
+        broke_down = state.squeeze_price_above_level is True and latest.close < level
+        broke_up = state.squeeze_price_above_level is False and latest.close > level
+        if broke_down or broke_up:
+            state.squeeze_broken = True
+            state.squeeze_broken_direction = Side.SHORT if broke_down else Side.LONG
+            state.squeeze_broken_level = level
+            state.squeeze_broken_ttl = 2
+
+    is_compressed = latest.range <= SQUEEZE_COMPRESSION_ATR * state.atr
     key_level, distance, level_kind = _nearest_key_level(state.last_price, state)
     near_level = key_level > 0 and distance <= SQUEEZE_LEVEL_ATR_PROXIMITY * state.atr
 
@@ -61,6 +96,7 @@ def update_squeeze(state: MarketState) -> None:
         if state.squeeze_bar_count >= SQUEEZE_MIN_BARS:
             state.in_squeeze = True
             state.squeeze_reference_level = key_level
+            state.squeeze_price_above_level = state.last_price > key_level
             # Fade thesis only makes sense against the level's real kind:
             # compressed on top of support → bounce up; under resistance → bounce down.
             if level_kind == "support" and state.last_price >= key_level:
@@ -74,6 +110,7 @@ def update_squeeze(state: MarketState) -> None:
         state.in_squeeze = False
         state.squeeze_reference_level = 0.0
         state.squeeze_direction = None
+        state.squeeze_price_above_level = None
 
 
 # --- Entry signal ---
@@ -91,15 +128,19 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
       6. CVD does not show divergence against the planned trade
       7. Order book imbalance does not oppose the planned trade
     """
-    if state.regime == Regime.UNKNOWN:
-        return None
-    if not state.in_squeeze:
+    if ENTRY_VARIANT == "break":
+        if not state.squeeze_broken:
+            return None
+        direction = state.squeeze_broken_direction
+    else:
+        if not state.in_squeeze:
+            return None
+        direction = state.squeeze_direction
+    if direction is None:
         return None
     if state.position is not None:
         return None
-
-    direction = state.squeeze_direction
-    if direction is None:
+    if state.regime == Regime.UNKNOWN:
         return None
 
     # Spread filter — refuse to trade when the book is abnormally wide
@@ -157,4 +198,6 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
         direction.value.upper(), state.regime.value,
         state.squeeze_reference_level, divergence, ob_dir,
     )
+    if ENTRY_VARIANT == "break":
+        _clear_broken(state)
     return direction

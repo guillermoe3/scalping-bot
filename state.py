@@ -128,6 +128,13 @@ class MarketState:
     squeeze_bar_count: int = 0
     squeeze_reference_level: float = 0.0
     squeeze_direction: Optional[Side] = None
+    squeeze_price_above_level: Optional[bool] = None
+
+    # Break-confirmation state (variant B): survives the breakout candle
+    squeeze_broken: bool = False
+    squeeze_broken_direction: Optional[Side] = None
+    squeeze_broken_level: float = 0.0
+    squeeze_broken_ttl: int = 0
 
     # Momentum
     volume_velocity: float = 0.0        # BTC/sec in current candle
