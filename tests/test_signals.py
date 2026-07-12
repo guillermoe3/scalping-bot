@@ -1,5 +1,5 @@
 from config import SPREAD_FILTER_ATR_PCT, SQUEEZE_MIN_BARS
-from signals import check_entry_signal, update_squeeze
+from signals import _nearest_key_level, check_entry_signal, update_squeeze
 from state import BookSnapshot, Candle, MarketState, OrderBookLevel, Position, Regime, Side
 
 
@@ -211,3 +211,50 @@ def test_entry_signal_rejected_when_book_imbalance_opposes_long():
 def test_entry_signal_returns_direction_when_all_gates_pass():
     state = _base_state(direction=Side.LONG)
     assert check_entry_signal(state) == Side.LONG
+
+
+def test_nearest_key_level_reports_support_kind():
+    state = MarketState()
+    state.swing_lows.append(90.0)
+    state.swing_highs.append(120.0)
+
+    level, distance, kind = _nearest_key_level(95.0, state)
+
+    assert (level, distance, kind) == (90.0, 5.0, "support")
+
+
+def test_nearest_key_level_reports_resistance_kind():
+    state = MarketState()
+    state.swing_lows.append(50.0)
+    state.swing_highs.append(110.0)
+
+    level, distance, kind = _nearest_key_level(108.0, state)
+
+    assert (level, distance, kind) == (110.0, 2.0, "resistance")
+
+
+def test_nearest_key_level_empty_returns_support_placeholder():
+    state = MarketState()
+
+    level, distance, kind = _nearest_key_level(100.0, state)
+
+    assert level == 0.0 and distance == float("inf") and kind == "support"
+
+
+def test_nearest_key_level_tie_prefers_side_consistent_level():
+    state = MarketState()
+    state.swing_lows.append(110.0)   # soporte POR ENCIMA del precio: incoherente
+    state.swing_highs.append(110.0)  # resistencia por encima: coherente
+
+    level, distance, kind = _nearest_key_level(100.0, state)
+
+    assert (level, kind) == (110.0, "resistance")
+
+
+def test_nearest_key_level_tie_falls_back_to_support():
+    state = MarketState()
+    state.swing_lows.append(90.0)    # soporte por debajo: coherente
+    state.swing_highs.append(110.0)  # resistencia por encima: coherente, misma distancia
+    level, distance, kind = _nearest_key_level(100.0, state)
+
+    assert (level, kind) == (90.0, "support")

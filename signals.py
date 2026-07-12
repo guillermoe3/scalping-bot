@@ -12,13 +12,24 @@ logger = logging.getLogger(__name__)
 
 # --- Key level proximity ---
 
-def _nearest_key_level(price: float, state: MarketState) -> Tuple[float, float]:
-    """Return (level, distance) for the closest swing high or low."""
-    levels = list(state.swing_highs) + list(state.swing_lows)
-    if not levels:
-        return 0.0, float("inf")
-    closest = min(levels, key=lambda lvl: abs(lvl - price))
-    return closest, abs(closest - price)
+def _nearest_key_level(price: float, state: MarketState) -> Tuple[float, float, str]:
+    """Return (level, distance, kind) for the closest swing level.
+
+    kind is "support" (swing low) or "resistance" (swing high). On an exact
+    distance tie the level consistent with the price side wins (support at or
+    below price, resistance at or above); if both qualify, support wins.
+    """
+    candidates = [(lvl, abs(lvl - price), "support") for lvl in state.swing_lows]
+    candidates += [(lvl, abs(lvl - price), "resistance") for lvl in state.swing_highs]
+    if not candidates:
+        return 0.0, float("inf"), "support"
+
+    def _rank(candidate):
+        lvl, dist, kind = candidate
+        consistent = (kind == "support" and lvl <= price) or (kind == "resistance" and lvl >= price)
+        return (dist, 0 if consistent else 1, 0 if kind == "support" else 1)
+
+    return min(candidates, key=_rank)
 
 
 # --- Squeeze detection (Volman compression model) ---
@@ -42,7 +53,7 @@ def update_squeeze(state: MarketState) -> None:
     latest = candles[-1]
     is_compressed = latest.range <= SQUEEZE_COMPRESSION_ATR * state.atr
 
-    key_level, distance = _nearest_key_level(state.last_price, state)
+    key_level, distance, level_kind = _nearest_key_level(state.last_price, state)
     near_level = key_level > 0 and distance <= SQUEEZE_LEVEL_ATR_PROXIMITY * state.atr
 
     if is_compressed and near_level:
