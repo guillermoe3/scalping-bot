@@ -258,3 +258,17 @@ def test_nearest_key_level_tie_falls_back_to_support():
     level, distance, kind = _nearest_key_level(100.0, state)
 
     assert (level, kind) == (90.0, "support")
+
+
+def test_update_squeeze_arms_without_direction_when_level_kind_is_incoherent():
+    state = MarketState()
+    state.atr = 10.0
+    state.swing_highs.append(95.0)  # resistencia ya rota, quedó DEBAJO del precio
+    state.last_price = 100.0
+
+    for i in range(SQUEEZE_MIN_BARS):
+        state.candles_15m.append(_candle(100, 101, 99, 100, i))
+        update_squeeze(state)
+
+    assert state.in_squeeze is True
+    assert state.squeeze_direction is None

@@ -61,10 +61,14 @@ def update_squeeze(state: MarketState) -> None:
         if state.squeeze_bar_count >= SQUEEZE_MIN_BARS:
             state.in_squeeze = True
             state.squeeze_reference_level = key_level
-            # Expected breakout direction is INTO the level (price pressed against it)
-            state.squeeze_direction = (
-                Side.LONG if state.last_price > key_level else Side.SHORT
-            )
+            # Fade thesis only makes sense against the level's real kind:
+            # compressed on top of support → bounce up; under resistance → bounce down.
+            if level_kind == "support" and state.last_price >= key_level:
+                state.squeeze_direction = Side.LONG
+            elif level_kind == "resistance" and state.last_price <= key_level:
+                state.squeeze_direction = Side.SHORT
+            else:
+                state.squeeze_direction = None
     else:
         state.squeeze_bar_count = 0
         state.in_squeeze = False
