@@ -39,6 +39,29 @@ def _nearest_key_level(price: float, state: MarketState) -> Tuple[float, float, 
 # live default stays "fade".
 ENTRY_VARIANT = "fade"
 
+GATE_NAMES = ("regime_known", "spread", "trend_1h", "macro", "breakout_align", "cvd", "ob_imbalance")
+
+# Backtest ablation hooks: gates listed here are skipped entirely.
+DISABLED_GATES: set = set()
+
+# Diagnostic counters, reset per backtest run via reset_signal_stats().
+GATE_VETO_COUNTS = {name: 0 for name in GATE_NAMES}
+SIGNAL_STATS = {"fired": 0}
+
+
+def reset_signal_stats() -> None:
+    for name in GATE_NAMES:
+        GATE_VETO_COUNTS[name] = 0
+    SIGNAL_STATS["fired"] = 0
+
+
+def _vetoed(name: str, opposes: bool) -> bool:
+    """A named gate rejects the candidate signal (unless disabled)."""
+    if name in DISABLED_GATES or not opposes:
+        return False
+    GATE_VETO_COUNTS[name] += 1
+    return True
+
 
 def _clear_broken(state: MarketState) -> None:
     state.squeeze_broken = False
@@ -120,13 +143,20 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
     Returns LONG, SHORT, or None.
 
     Required conditions (all must pass):
-      1. Regime is known (not UNKNOWN)
-      2. Active Volman squeeze detected
-      3. Squeeze direction aligns with 1h trend bias (or 1h trend is unknown)
-      4. No macro context block
-      5. In BREAKOUT regime: squeeze must align with the breakout direction
-      6. CVD does not show divergence against the planned trade
-      7. Order book imbalance does not oppose the planned trade
+      1. Variant-specific squeeze candidate: an armed squeeze (fade) or a
+         just-broken squeeze (break) supplies a direction
+      2. Direction is resolved (squeeze/break direction is not None)
+      3. No position already open
+      4. Named gates, in order (each individually disableable via
+         DISABLED_GATES and counted in GATE_VETO_COUNTS on rejection):
+           - regime_known: regime is not UNKNOWN
+           - spread: book spread within ATR-relative bound
+           - trend_1h: direction aligns with 1h trend bias (or unknown)
+           - macro: no macro context block for this direction
+           - breakout_align: in BREAKOUT regime, squeeze aligns with the
+             breakout candle
+           - cvd: CVD shows no divergence against the planned trade
+           - ob_imbalance: order book imbalance does not oppose the trade
     """
     if ENTRY_VARIANT == "break":
         if not state.squeeze_broken:
@@ -140,64 +170,60 @@ def check_entry_signal(state: MarketState) -> Optional[Side]:
         return None
     if state.position is not None:
         return None
-    if state.regime == Regime.UNKNOWN:
+
+    if _vetoed("regime_known", state.regime == Regime.UNKNOWN):
+        logger.debug("Signal rejected: regime unknown")
         return None
 
-    # Spread filter — refuse to trade when the book is abnormally wide
-    if state.atr > 0 and state.spread > SPREAD_FILTER_ATR_PCT * state.atr:
+    if _vetoed("spread", state.atr > 0 and state.spread > SPREAD_FILTER_ATR_PCT * state.atr):
         logger.debug(
             "Signal rejected: spread %.4f exceeds %.0f%% of ATR %.4f",
             state.spread, SPREAD_FILTER_ATR_PCT * 100, state.atr,
         )
         return None
 
-    # Hard block: never trade against the confirmed higher-timeframe trend
-    if state.trend_1h is not None and state.trend_1h != direction:
+    if _vetoed("trend_1h", state.trend_1h is not None and state.trend_1h != direction):
         logger.debug("Signal rejected: 1h trend %s opposes %s", state.trend_1h, direction)
         return None
 
-    # Macro gates
-    if direction == Side.LONG and state.macro_blocks_longs:
-        logger.debug("Signal rejected: macro blocks longs")
-        return None
-    if direction == Side.SHORT and state.macro_blocks_shorts:
-        logger.debug("Signal rejected: macro blocks shorts")
+    macro_opposes = (direction == Side.LONG and state.macro_blocks_longs) or \
+                    (direction == Side.SHORT and state.macro_blocks_shorts)
+    if _vetoed("macro", macro_opposes):
+        logger.debug("Signal rejected: macro blocks %s", direction.value)
         return None
 
-    # In a breakout, only trade in the breakout's direction
+    breakout_opposes = False
     if state.regime == Regime.BREAKOUT:
         candles = list(state.candles_15m)
         if candles:
             last = candles[-1]
-            aligned = (direction == Side.LONG and last.bullish) or \
-                      (direction == Side.SHORT and last.bearish)
-            if not aligned:
-                logger.debug("Signal rejected: squeeze direction opposes breakout candle")
-                return None
+            breakout_opposes = not ((direction == Side.LONG and last.bullish) or
+                                    (direction == Side.SHORT and last.bearish))
+    if _vetoed("breakout_align", breakout_opposes):
+        logger.debug("Signal rejected: squeeze direction opposes breakout candle")
+        return None
 
-    # CVD filter — divergence warns that the move lacks genuine participation
     divergence = detect_cvd_divergence(state)
-    if direction == Side.LONG and divergence == "bearish_divergence":
-        logger.debug("Signal rejected: bearish CVD divergence on long setup")
-        return None
-    if direction == Side.SHORT and divergence == "bullish_divergence":
-        logger.debug("Signal rejected: bullish CVD divergence on short setup")
+    cvd_opposes = (direction == Side.LONG and divergence == "bearish_divergence") or \
+                  (direction == Side.SHORT and divergence == "bullish_divergence")
+    if _vetoed("cvd", cvd_opposes):
+        logger.debug("Signal rejected: %s against %s setup", divergence, direction.value)
         return None
 
-    # Order book imbalance filter — heavy opposing wall kills the setup
     _, ob_dir = get_book_imbalance(state)
-    if direction == Side.LONG and ob_dir == "ask":
-        logger.debug("Signal rejected: ask-side book imbalance on long setup")
+    ob_opposes = (direction == Side.LONG and ob_dir == "ask") or \
+                 (direction == Side.SHORT and ob_dir == "bid")
+    if _vetoed("ob_imbalance", ob_opposes):
+        logger.debug("Signal rejected: %s-side book imbalance on %s setup", ob_dir, direction.value)
         return None
-    if direction == Side.SHORT and ob_dir == "bid":
-        logger.debug("Signal rejected: bid-side book imbalance on short setup")
-        return None
+
+    SIGNAL_STATS["fired"] += 1
+    if ENTRY_VARIANT == "break":
+        _clear_broken(state)
 
     logger.info(
         "Entry signal: %s | regime=%s | level=%.2f | divergence=%s | ob=%s",
         direction.value.upper(), state.regime.value,
         state.squeeze_reference_level, divergence, ob_dir,
     )
-    if ENTRY_VARIANT == "break":
-        _clear_broken(state)
     return direction

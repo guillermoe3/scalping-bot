@@ -383,3 +383,50 @@ def test_fade_variant_ignores_broken_state():
     signals.ENTRY_VARIANT = "fade"
 
     assert check_entry_signal(state) is None
+
+
+def test_disabled_gate_lets_signal_through():
+    state = _base_state(direction=Side.LONG)
+    state.trend_1h = Side.SHORT  # el gate trend_1h vetaría este long
+    signals.DISABLED_GATES = {"trend_1h"}
+
+    assert check_entry_signal(state) == Side.LONG
+
+
+def test_gate_veto_counter_increments_on_rejection():
+    signals.reset_signal_stats()
+    state = _base_state(direction=Side.LONG)
+    state.trend_1h = Side.SHORT
+
+    assert check_entry_signal(state) is None
+    assert signals.GATE_VETO_COUNTS["trend_1h"] == 1
+    assert signals.SIGNAL_STATS["fired"] == 0
+
+
+def test_signals_fired_counter_increments_on_pass():
+    signals.reset_signal_stats()
+    state = _base_state(direction=Side.LONG)
+
+    assert check_entry_signal(state) == Side.LONG
+    assert signals.SIGNAL_STATS["fired"] == 1
+    assert all(count == 0 for count in signals.GATE_VETO_COUNTS.values())
+
+
+def test_regime_unknown_counts_as_gate_veto_only_with_live_squeeze():
+    signals.reset_signal_stats()
+    state = _base_state(direction=Side.LONG, regime=Regime.UNKNOWN)
+
+    assert check_entry_signal(state) is None
+    assert signals.GATE_VETO_COUNTS["regime_known"] == 1
+
+    signals.reset_signal_stats()
+    state.in_squeeze = False  # sin señal candidata no se cuenta nada
+    assert check_entry_signal(state) is None
+    assert signals.GATE_VETO_COUNTS["regime_known"] == 0
+
+
+def test_disabling_regime_gate_allows_unknown_regime():
+    state = _base_state(direction=Side.LONG, regime=Regime.UNKNOWN)
+    signals.DISABLED_GATES = {"regime_known"}
+
+    assert check_entry_signal(state) == Side.LONG
