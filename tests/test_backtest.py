@@ -130,3 +130,56 @@ def test_run_backtest_never_touches_the_real_safety_state_file(tmp_path):
     asyncio.run(backtest.run_backtest(args, exchange=exchange))
 
     assert safety.STATE_FILE_PATH != "safety_state.json"
+
+
+def test_parse_args_accepts_ablation_flags():
+    args = backtest.parse_args([
+        "--start", "2026-04-01", "--end", "2026-04-02",
+        "--variant", "break", "--disable-gate", "cvd", "--disable-gate", "trend_1h",
+        "--squeeze-compression", "0.6", "--squeeze-min-bars", "2",
+    ])
+    assert args.variant == "break"
+    assert args.disable_gate == ["cvd", "trend_1h"]
+    assert args.squeeze_compression == 0.6
+    assert args.squeeze_min_bars == 2
+
+
+def test_parse_args_rejects_unknown_gate():
+    with pytest.raises(SystemExit):
+        backtest.parse_args([
+            "--start", "2026-04-01", "--end", "2026-04-02",
+            "--disable-gate", "no-existe",
+        ])
+
+
+def test_run_records_ablation_params_in_meta_and_gate_stats_in_summary(tmp_path):
+    # _FakeExchange, _sample_day, START/END y el fixture autouse _isolate_runs_dir
+    # (que redirige backtest.RUNS_DIR a tmp) ya existen en este archivo.
+    import signals
+
+    klines_1m, trades = _sample_day()
+    exchange = _FakeExchange(klines_1m, trades)
+
+    rc = backtest.main(
+        ["--start", START, "--end", END, "--out", str(tmp_path / "t.csv"),
+         "--label", "abl-test", "--variant", "break", "--disable-gate", "cvd",
+         "--squeeze-compression", "0.6", "--squeeze-min-bars", "2"],
+        exchange=exchange,
+    )
+    assert rc == 0
+
+    run_dirs = [d for d in os.listdir(backtest.RUNS_DIR)
+                if os.path.isdir(os.path.join(backtest.RUNS_DIR, d))]
+    assert len(run_dirs) == 1
+    run = os.path.join(backtest.RUNS_DIR, run_dirs[0])
+
+    meta = json.load(open(os.path.join(run, "meta.json")))
+    assert meta["variant"] == "break"
+    assert meta["disabled_gates"] == ["cvd"]
+    assert meta["squeeze_compression"] == 0.6
+    assert meta["squeeze_min_bars"] == 2
+
+    metrics = json.load(open(os.path.join(run, "summary.json")))["metrics"]
+    assert isinstance(metrics["gate_vetoes"], dict)
+    assert set(metrics["gate_vetoes"]) == set(signals.GATE_NAMES)
+    assert isinstance(metrics["signals_fired"], int)

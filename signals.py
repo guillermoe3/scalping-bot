@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Optional, Tuple
 
-from config import SPREAD_FILTER_ATR_PCT, SQUEEZE_COMPRESSION_ATR, SQUEEZE_LEVEL_ATR_PROXIMITY, SQUEEZE_MIN_BARS
+import config
+from config import SPREAD_FILTER_ATR_PCT, SQUEEZE_LEVEL_ATR_PROXIMITY
 from order_flow import detect_cvd_divergence, get_book_imbalance
 from state import MarketState, Regime, Side
 
@@ -110,13 +111,13 @@ def update_squeeze(state: MarketState) -> None:
             state.squeeze_broken_level = level
             state.squeeze_broken_ttl = 2
 
-    is_compressed = latest.range <= SQUEEZE_COMPRESSION_ATR * state.atr
+    is_compressed = latest.range <= config.SQUEEZE_COMPRESSION_ATR * state.atr
     key_level, distance, level_kind = _nearest_key_level(state.last_price, state)
     near_level = key_level > 0 and distance <= SQUEEZE_LEVEL_ATR_PROXIMITY * state.atr
 
     if is_compressed and near_level:
         state.squeeze_bar_count += 1
-        if state.squeeze_bar_count >= SQUEEZE_MIN_BARS:
+        if state.squeeze_bar_count >= config.SQUEEZE_MIN_BARS:
             state.in_squeeze = True
             state.squeeze_reference_level = key_level
             state.squeeze_price_above_level = state.last_price > key_level

@@ -7,7 +7,9 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
+import config
 import safety
+import signals
 from backtest_feed import BacktestFeed
 from backtest_html import write_index
 from backtest_report import (
@@ -42,6 +44,13 @@ def parse_args(argv) -> argparse.Namespace:
     parser.add_argument("--out", default="backtest_trades.csv")
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--label", default=None, help="Etiqueta corta para identificar la corrida en el comparador")
+    parser.add_argument("--variant", choices=("fade", "break"), default="fade",
+                        help="Modelo de entrada: fade (anticipado) o break (confirmación de ruptura)")
+    parser.add_argument("--disable-gate", action="append", default=None,
+                        choices=signals.GATE_NAMES, dest="disable_gate",
+                        help="Apaga un gate de entrada (repetible)")
+    parser.add_argument("--squeeze-compression", type=float, default=config.SQUEEZE_COMPRESSION_ATR)
+    parser.add_argument("--squeeze-min-bars", type=int, default=config.SQUEEZE_MIN_BARS)
     return parser.parse_args(argv)
 
 
@@ -59,6 +68,12 @@ async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
     end_ms = _parse_date_utc(args.end)
     validate_range(start_ms, end_ms)
 
+    config.SQUEEZE_COMPRESSION_ATR = args.squeeze_compression
+    config.SQUEEZE_MIN_BARS = args.squeeze_min_bars
+    signals.ENTRY_VARIANT = args.variant
+    signals.DISABLED_GATES = set(args.disable_gate or ())
+    signals.reset_signal_stats()
+
     _, state_file_path = tempfile.mkstemp(prefix="backtest_safety_state_", suffix=".json")
     safety.STATE_FILE_PATH = state_file_path
 
@@ -71,6 +86,8 @@ async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
     await feed.replay(start_ms, end_ms)
 
     summary = compute_summary(trade_records)
+    summary["gate_vetoes"] = dict(signals.GATE_VETO_COUNTS)
+    summary["signals_fired"] = signals.SIGNAL_STATS["fired"]
     write_trade_log_csv(trade_records, args.out)
 
     closes = [r for r in trade_records if not r["is_partial"]]
@@ -83,6 +100,10 @@ async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
         "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "duration_seconds": round(time.monotonic() - t0, 1),
         "format_version": 1,
+        "variant": args.variant,
+        "disabled_gates": sorted(signals.DISABLED_GATES),
+        "squeeze_compression": args.squeeze_compression,
+        "squeeze_min_bars": args.squeeze_min_bars,
     }
     dir_name = make_run_dir_name(datetime.now(timezone.utc), args.label)
     run_dir = write_run(RUNS_DIR, dir_name, meta, summary, equity_curve, trade_records)
