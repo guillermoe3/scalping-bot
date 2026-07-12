@@ -93,3 +93,12 @@ def test_index_tolerates_runs_without_gate_vetoes(tmp_path):
     html_text = open(os.path.join(str(tmp_path), "index.html")).read()
 
     assert "Vetos" in html_text  # la columna existe igual; la celda rinde "—"
+
+
+def test_index_renders_zero_when_all_vetoes_are_zero(tmp_path):
+    _make_run(str(tmp_path), "2026-07-12_11-00-00", gate_vetoes={"trend_1h": 0, "cvd": 0})
+
+    write_index(str(tmp_path))
+    html_text = open(os.path.join(str(tmp_path), "index.html")).read()
+
+    assert ">0<" in html_text  # gates corrieron y no vetaron nada: "0", no "—"

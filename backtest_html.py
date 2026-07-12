@@ -75,7 +75,7 @@ def _fmt_vetoes(vetoes) -> str:
     if not isinstance(vetoes, dict) or not vetoes:
         return "—"
     parts = [f"{k}:{v}" for k, v in sorted(vetoes.items(), key=lambda kv: -kv[1]) if v]
-    return html.escape(" ".join(parts)) if parts else "—"
+    return html.escape(" ".join(parts)) if parts else "0"
 
 
 def _row(run: dict) -> str:
