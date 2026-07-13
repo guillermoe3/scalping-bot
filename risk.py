@@ -209,7 +209,8 @@ def _apply_structural_trail(state: MarketState) -> None:
         candidates = [l for l in lows if l > pos.entry_price - pos.initial_sl_distance]
         if candidates:
             trail = max(candidates)
-            if trail > pos.stop_loss:
+            # A swing level at/above current price would trigger sl_hit on this same tick
+            if trail > pos.stop_loss and trail < state.last_price:
                 pos.stop_loss = trail
                 logger.debug("Structural trail: SL → %.2f", trail)
 
@@ -217,7 +218,7 @@ def _apply_structural_trail(state: MarketState) -> None:
         candidates = [h for h in highs if h < pos.entry_price + pos.initial_sl_distance]
         if candidates:
             trail = min(candidates)
-            if trail < pos.stop_loss:
+            if trail < pos.stop_loss and trail > state.last_price:
                 pos.stop_loss = trail
                 logger.debug("Structural trail: SL → %.2f", trail)
 

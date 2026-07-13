@@ -12,7 +12,7 @@ from risk import (
     open_position,
     plan_entry,
 )
-from state import MarketState, Side
+from state import Candle, MarketState, Side
 
 
 def _state_with_long_position(entry: float = 100.0, atr: float = 2.0) -> MarketState:
@@ -277,3 +277,81 @@ def test_open_position_wrapper_still_charges_taker_fee():
     open_position(state, Side.LONG, 100.0, balance=10_000.0)
     pos = state.position
     assert pos.fees_paid == pytest.approx(pos.size * 100.0 * TAKER_FEE_RATE)
+
+
+# --- Structural trail must stay on the correct side of current price ---
+
+def _swing_low_candles(pivot_low: float = 99.0) -> list:
+    """7 x 15m candles (minimum for lookback=3) with a valley at the center index."""
+    lows = [105.0, 103.0, 101.0, pivot_low, 101.0, 103.0, 105.0]
+    return [
+        Candle(open=low, high=low + 2.0, low=low, close=low, volume=0.0, timestamp=i * 900_000)
+        for i, low in enumerate(lows)
+    ]
+
+
+def _swing_high_candles(pivot_high: float = 101.0) -> list:
+    """7 x 15m candles (minimum for lookback=3) with a peak at the center index."""
+    highs = [95.0, 97.0, 99.0, pivot_high, 99.0, 97.0, 95.0]
+    return [
+        Candle(open=high - 2.0, high=high, low=high - 2.0, close=high, volume=0.0, timestamp=i * 900_000)
+        for i, high in enumerate(highs)
+    ]
+
+
+def test_manage_position_does_not_adopt_long_trail_that_lands_above_current_price():
+    from risk import manage_position
+
+    state = _state_with_long_position(entry=100.0, atr=2.0)
+    state.candles_15m.extend(_swing_low_candles(pivot_low=99.0))
+    state.last_price = 98.0  # recent swing low (99.0) sits above current price
+
+    _, reason = manage_position(state)
+
+    assert state.position.stop_loss < state.last_price
+    assert reason != "stop_loss"
+
+
+def test_manage_position_does_not_adopt_short_trail_that_lands_below_current_price():
+    from risk import manage_position
+
+    state = MarketState()
+    state.atr = 2.0
+    state.last_price = 100.0
+    open_position(state, Side.SHORT, 100.0)
+    state.candles_15m.extend(_swing_high_candles(pivot_high=101.0))
+    state.last_price = 102.0  # recent swing high (101.0) sits below current price
+
+    _, reason = manage_position(state)
+
+    assert state.position.stop_loss > state.last_price
+    assert reason != "stop_loss"
+
+
+def test_manage_position_still_trails_long_stop_to_valid_swing_low():
+    from risk import manage_position
+
+    state = _state_with_long_position(entry=100.0, atr=2.0)
+    state.candles_15m.extend(_swing_low_candles(pivot_low=99.0))
+    state.last_price = 101.0  # in profit, but below the breakeven trigger (0.8 * ATR = 1.6)
+
+    _, reason = manage_position(state)
+
+    assert state.position.stop_loss == pytest.approx(99.0)
+    assert reason is None
+
+
+def test_manage_position_still_trails_short_stop_to_valid_swing_high():
+    from risk import manage_position
+
+    state = MarketState()
+    state.atr = 2.0
+    state.last_price = 100.0
+    open_position(state, Side.SHORT, 100.0)
+    state.candles_15m.extend(_swing_high_candles(pivot_high=101.0))
+    state.last_price = 99.0  # in profit, but below the breakeven trigger
+
+    _, reason = manage_position(state)
+
+    assert state.position.stop_loss == pytest.approx(101.0)
+    assert reason is None
