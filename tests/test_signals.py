@@ -1,5 +1,6 @@
+import signals
 from config import SPREAD_FILTER_ATR_PCT, SQUEEZE_MIN_BARS
-from signals import check_entry_signal, update_squeeze
+from signals import _nearest_key_level, check_entry_signal, update_squeeze
 from state import BookSnapshot, Candle, MarketState, OrderBookLevel, Position, Regime, Side
 
 
@@ -210,4 +211,222 @@ def test_entry_signal_rejected_when_book_imbalance_opposes_long():
 
 def test_entry_signal_returns_direction_when_all_gates_pass():
     state = _base_state(direction=Side.LONG)
+    assert check_entry_signal(state) == Side.LONG
+
+
+def test_nearest_key_level_reports_support_kind():
+    state = MarketState()
+    state.swing_lows.append(90.0)
+    state.swing_highs.append(120.0)
+
+    level, distance, kind = _nearest_key_level(95.0, state)
+
+    assert (level, distance, kind) == (90.0, 5.0, "support")
+
+
+def test_nearest_key_level_reports_resistance_kind():
+    state = MarketState()
+    state.swing_lows.append(50.0)
+    state.swing_highs.append(110.0)
+
+    level, distance, kind = _nearest_key_level(108.0, state)
+
+    assert (level, distance, kind) == (110.0, 2.0, "resistance")
+
+
+def test_nearest_key_level_empty_returns_support_placeholder():
+    state = MarketState()
+
+    level, distance, kind = _nearest_key_level(100.0, state)
+
+    assert level == 0.0 and distance == float("inf") and kind == "support"
+
+
+def test_nearest_key_level_tie_prefers_side_consistent_level():
+    state = MarketState()
+    state.swing_lows.append(110.0)   # soporte POR ENCIMA del precio: incoherente
+    state.swing_highs.append(110.0)  # resistencia por encima: coherente
+
+    level, distance, kind = _nearest_key_level(100.0, state)
+
+    assert (level, kind) == (110.0, "resistance")
+
+
+def test_nearest_key_level_tie_falls_back_to_support():
+    state = MarketState()
+    state.swing_lows.append(90.0)    # soporte por debajo: coherente
+    state.swing_highs.append(110.0)  # resistencia por encima: coherente, misma distancia
+    level, distance, kind = _nearest_key_level(100.0, state)
+
+    assert (level, kind) == (90.0, "support")
+
+
+def test_update_squeeze_arms_without_direction_when_level_kind_is_incoherent():
+    state = MarketState()
+    state.atr = 10.0
+    state.swing_highs.append(95.0)  # resistencia ya rota, quedó DEBAJO del precio
+    state.last_price = 100.0
+
+    for i in range(SQUEEZE_MIN_BARS):
+        state.candles_15m.append(_candle(100, 101, 99, 100, i))
+        update_squeeze(state)
+
+    assert state.in_squeeze is True
+    assert state.squeeze_direction is None
+
+
+def _armed_squeeze_below_resistance() -> MarketState:
+    """Squeeze armada contra resistencia en 110, precio en 108."""
+    state = MarketState()
+    state.atr = 10.0
+    state.swing_highs.append(110.0)
+    state.last_price = 108.0
+    for i in range(SQUEEZE_MIN_BARS):
+        state.candles_15m.append(_candle(108, 109, 107, 108, i))
+        update_squeeze(state)
+    assert state.in_squeeze is True
+    return state
+
+
+def test_break_above_resistance_sets_broken_state_long():
+    state = _armed_squeeze_below_resistance()
+
+    state.candles_15m.append(_candle(108, 120, 107, 115, 99))  # cierra ARRIBA de 110
+    update_squeeze(state)
+
+    assert state.squeeze_broken is True
+    assert state.squeeze_broken_direction == Side.LONG
+    assert state.squeeze_broken_level == 110.0
+    assert state.squeeze_broken_ttl == 2
+    assert state.in_squeeze is False  # la vela de ruptura sí resetea la squeeze
+
+
+def test_break_below_support_sets_broken_state_short():
+    state = MarketState()
+    state.atr = 10.0
+    state.swing_lows.append(90.0)
+    state.last_price = 92.0
+    for i in range(SQUEEZE_MIN_BARS):
+        state.candles_15m.append(_candle(92, 93, 91, 92, i))
+        update_squeeze(state)
+    assert state.in_squeeze is True
+
+    state.candles_15m.append(_candle(92, 93, 80, 85, 99))  # cierra DEBAJO de 90
+    update_squeeze(state)
+
+    assert state.squeeze_broken is True
+    assert state.squeeze_broken_direction == Side.SHORT
+
+
+def test_close_exactly_on_level_is_not_a_break():
+    state = _armed_squeeze_below_resistance()
+
+    state.candles_15m.append(_candle(108, 120, 107, 110.0, 99))  # cierre exacto en el nivel
+    update_squeeze(state)
+
+    assert state.squeeze_broken is False
+
+
+def test_bounce_away_from_level_is_not_a_break():
+    state = _armed_squeeze_below_resistance()
+
+    state.candles_15m.append(_candle(108, 109, 90, 95, 99))  # se aleja SIN cruzar 110
+    update_squeeze(state)
+
+    assert state.squeeze_broken is False
+
+
+def test_broken_state_expires_after_ttl():
+    state = _armed_squeeze_below_resistance()
+    state.candles_15m.append(_candle(108, 120, 107, 115, 99))
+    update_squeeze(state)
+    assert state.squeeze_broken is True
+
+    state.candles_15m.append(_candle(115, 130, 114, 128, 100))  # N+1: decrementa a 1
+    update_squeeze(state)
+    assert state.squeeze_broken is True
+
+    state.candles_15m.append(_candle(128, 140, 127, 138, 101))  # N+2: llega a 0, limpia
+    update_squeeze(state)
+    assert state.squeeze_broken is False
+    assert state.squeeze_broken_direction is None
+
+
+def _broken_long_setup_state() -> MarketState:
+    state = _base_state(direction=Side.LONG)
+    state.in_squeeze = False
+    state.squeeze_direction = None
+    state.squeeze_broken = True
+    state.squeeze_broken_direction = Side.LONG
+    state.squeeze_broken_level = 95.0
+    state.squeeze_broken_ttl = 2
+    return state
+
+
+def test_break_variant_fires_on_broken_state_and_consumes_it():
+    state = _broken_long_setup_state()
+    signals.ENTRY_VARIANT = "break"
+
+    assert check_entry_signal(state) == Side.LONG
+    assert state.squeeze_broken is False  # consumida
+
+
+def test_break_variant_ignores_plain_armed_squeeze():
+    state = _base_state(direction=Side.LONG)  # in_squeeze pero sin break
+    signals.ENTRY_VARIANT = "break"
+
+    assert check_entry_signal(state) is None
+
+
+def test_fade_variant_ignores_broken_state():
+    state = _broken_long_setup_state()
+    signals.ENTRY_VARIANT = "fade"
+
+    assert check_entry_signal(state) is None
+
+
+def test_disabled_gate_lets_signal_through():
+    state = _base_state(direction=Side.LONG)
+    state.trend_1h = Side.SHORT  # el gate trend_1h vetaría este long
+    signals.DISABLED_GATES = {"trend_1h"}
+
+    assert check_entry_signal(state) == Side.LONG
+
+
+def test_gate_veto_counter_increments_on_rejection():
+    signals.reset_signal_stats()
+    state = _base_state(direction=Side.LONG)
+    state.trend_1h = Side.SHORT
+
+    assert check_entry_signal(state) is None
+    assert signals.GATE_VETO_COUNTS["trend_1h"] == 1
+    assert signals.SIGNAL_STATS["fired"] == 0
+
+
+def test_signals_fired_counter_increments_on_pass():
+    signals.reset_signal_stats()
+    state = _base_state(direction=Side.LONG)
+
+    assert check_entry_signal(state) == Side.LONG
+    assert signals.SIGNAL_STATS["fired"] == 1
+    assert all(count == 0 for count in signals.GATE_VETO_COUNTS.values())
+
+
+def test_regime_unknown_counts_as_gate_veto_only_with_live_squeeze():
+    signals.reset_signal_stats()
+    state = _base_state(direction=Side.LONG, regime=Regime.UNKNOWN)
+
+    assert check_entry_signal(state) is None
+    assert signals.GATE_VETO_COUNTS["regime_known"] == 1
+
+    signals.reset_signal_stats()
+    state.in_squeeze = False  # sin señal candidata no se cuenta nada
+    assert check_entry_signal(state) is None
+    assert signals.GATE_VETO_COUNTS["regime_known"] == 0
+
+
+def test_disabling_regime_gate_allows_unknown_regime():
+    state = _base_state(direction=Side.LONG, regime=Regime.UNKNOWN)
+    signals.DISABLED_GATES = {"regime_known"}
+
     assert check_entry_signal(state) == Side.LONG

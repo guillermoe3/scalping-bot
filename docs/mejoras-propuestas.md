@@ -195,8 +195,8 @@ ATR% p50 de 15m medido en 0.280%).
   trimestre. Ese hallazgo refuerza la urgencia del ablation: hoy no se sabe
   qué gate (o combinación) está vetando todo.
 
-Siguen pendientes: cost gate explícito (P0-3) y ablation de gates (P0-8),
-ahora desbloqueado por la base de P0-6/P0-7.
+Sigue pendiente: cost gate explícito (P0-3). El ablation de gates (P0-8)
+se ejecutó el 2026-07-13 (ver más abajo).
 
 **Diagnóstico + sweep de umbrales de squeeze (2026-07-03, corridas
 persistidas en `backtest_runs/`, comparables en `index.html`):** el 0-trades
@@ -213,3 +213,33 @@ anti-predictiva en 15m — ninguna calibración lo salva. Esto convierte a la
 trackeado vs. pasar a entrada por confirmación de ruptura) en el bloqueante
 único previo a cualquier otro trabajo de señal. El ablation P0-8 debe
 correrse para la variante que se elija en N1, no para la actual.
+
+**N1 + P0-8 ejecutados (2026-07-13, reporte:
+`backtest_runs/ablation-2026-07-13.md`, spec:
+`docs/superpowers/specs/2026-07-12-n1-variantes-ablation.md`):** se
+implementaron las dos variantes de N1 (A: fade exigiendo coherencia con el
+tipo de nivel; B: entrada por confirmación de ruptura con estado
+`squeeze_broken` y TTL de 2 velas) más el harness de ablation (gates
+nombrados y desactivables con contadores de veto, flags reproducibles en el
+CLI, `run_ablation.py` con matriz pre-registrada de 12 corridas). Resultado
+sobre abr-jun 2026 (embudo 0.6 · 2 velas):
+
+- **Variante A (fade):** 28 trades, **0% de aciertos**, -$354.66, PF 0.00.
+- **Variante B (break):** 48 trades, 8.3% de aciertos, -$619.51, PF 0.12.
+- **Veredicto pre-registrado (P&L neto > 0 y ≥ 30 trades): NO se adopta
+  ninguna.** El default de entrada queda como estaba.
+- **Hallazgo del ablation:** ningún gate esconde rentabilidad. `trend_1h`
+  es el dominante (125 vetos en A, 79 en B) y quitarlo *empeora* el
+  resultado (A: 95 trades, -$1.123; B: 78 trades, -$896.56) — filtra
+  trades aún peores. `regime_known` y `breakout_align` no vetan nada
+  (corridas idénticas a base); `macro` y `ob_imbalance` son inertes en
+  backtest y quedan sin medir.
+
+Conclusión: con tres meses de datos, dos modelos de entrada distintos y el
+embudo abierto gate por gate, **el problema es la hipótesis de señal en sí
+(squeeze 15m sobre niveles), no la calibración ni los filtros**. El 0% de
+aciertos del fade y el PF 0.12 del break indican dirección anti-predictiva,
+no mala suerte de muestreo. Cualquier trabajo futuro de señal debería partir
+de una hipótesis nueva y pasar por este mismo harness (que queda mergeado y
+reutilizable) antes de tocar producción. P0-3 (cost gate) pierde urgencia:
+sin señal rentable no hay costo que optimizar.

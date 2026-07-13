@@ -10,6 +10,7 @@ _COLS = [
     ("commit", "Commit"), ("total_trades", "Trades"), ("win_rate", "Win rate"),
     ("total_net_pnl", "P&L neto"), ("profit_factor", "Profit factor"),
     ("max_drawdown", "Max DD"), ("max_consecutive_losses", "Racha perd."),
+    ("gate_vetoes", "Vetos"),
     ("equity", "Equity"),
 ]
 
@@ -70,6 +71,13 @@ def _fmt(value, spec: str = "") -> str:
         return html.escape(str(value))
 
 
+def _fmt_vetoes(vetoes) -> str:
+    if not isinstance(vetoes, dict) or not vetoes:
+        return "—"
+    parts = [f"{k}:{v}" for k, v in sorted(vetoes.items(), key=lambda kv: -kv[1]) if v]
+    return html.escape(" ".join(parts)) if parts else "0"
+
+
 def _row(run: dict) -> str:
     meta, m = run["meta"], run["summary"]["metrics"]
     cells = [
@@ -83,6 +91,7 @@ def _row(run: dict) -> str:
         _fmt(m.get("profit_factor"), ".2f"),
         _fmt(m.get("max_drawdown"), ".2f"),
         _fmt(m.get("max_consecutive_losses")),
+        _fmt_vetoes(m.get("gate_vetoes")),
         _sparkline_svg(run["summary"].get("equity_curve", [])),
     ]
     numeric_cols = {4, 5, 6, 7, 8, 9}  # total_trades..max_consecutive_losses
