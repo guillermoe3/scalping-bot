@@ -36,6 +36,8 @@ def build_run_matrix() -> list:
 
 
 def _spec_matches_meta(spec: dict, meta: dict, start: str, end: str) -> bool:
+    if not isinstance(meta, dict):
+        return False
     disabled = [spec["disabled_gate"]] if spec["disabled_gate"] else []
     return (meta.get("label") == spec["label"]
             and meta.get("start") == start and meta.get("end") == end
@@ -48,7 +50,7 @@ def _spec_matches_meta(spec: dict, meta: dict, start: str, end: str) -> bool:
 def find_existing_run(spec: dict, start: str, end: str, runs_dir: str = RUNS_DIR):
     if not os.path.isdir(runs_dir):
         return None
-    for name in sorted(os.listdir(runs_dir)):
+    for name in sorted(os.listdir(runs_dir), reverse=True):
         meta_path = os.path.join(runs_dir, name, "meta.json")
         if not os.path.isfile(meta_path):
             continue

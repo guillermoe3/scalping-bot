@@ -30,6 +30,32 @@ def test_matrix_has_12_runs_with_systematic_labels():
     assert not any("macro" in l or "ob_imbalance" in l for l in labels)  # inertes excluidos
 
 
+def test_find_existing_run_prefers_newest_match(tmp_path):
+    spec = run_ablation.build_run_matrix()[0]  # ablA-base
+    _write_fake_run(tmp_path, "2026-07-10_00-00-00_ablA-base", _meta_for(spec),
+                    {"total_trades": 5})
+    _write_fake_run(tmp_path, "2026-07-12_00-00-00_ablA-base", _meta_for(spec),
+                    {"total_trades": 40})
+
+    found = run_ablation.find_existing_run(spec, "2026-04-01", "2026-07-01",
+                                            runs_dir=str(tmp_path))
+
+    assert found == "2026-07-12_00-00-00_ablA-base"  # el más reciente gana
+
+
+def test_find_existing_run_ignores_non_dict_meta(tmp_path):
+    spec = run_ablation.build_run_matrix()[0]  # ablA-base
+    bad_dir = tmp_path / "2026-07-11_00-00-00_ablA-base"
+    bad_dir.mkdir(parents=True)
+    (bad_dir / "meta.json").write_text(json.dumps(["not", "a", "dict"]))
+
+    # no debe explotar con AttributeError al toparse con un meta.json que no es dict
+    found = run_ablation.find_existing_run(spec, "2026-04-01", "2026-07-01",
+                                            runs_dir=str(tmp_path))
+
+    assert found is None
+
+
 def test_run_matrix_skips_existing_runs_and_runs_the_rest(tmp_path):
     done = run_ablation.build_run_matrix()[0]  # ablA-base ya corrida
     _write_fake_run(tmp_path, "2026-07-12_00-00-00_ablA-base", _meta_for(done),
