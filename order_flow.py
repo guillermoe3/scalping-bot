@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, List, Tuple
+from typing import Optional
 
-from config import OB_SNAPSHOTS, OB_IMBALANCE_RATIO, CVD_DIVERGENCE_LOOKBACK
-from state import BookSnapshot, MarketState
+from config import CVD_DIVERGENCE_LOOKBACK
+from state import MarketState
 
 logger = logging.getLogger(__name__)
 
@@ -44,49 +44,3 @@ def detect_cvd_divergence(state: MarketState) -> Optional[str]:
         return "bullish_divergence"
 
     return None
-
-
-# --- Order book ---
-
-def _averaged_bid_ask_volume(snapshots: List[BookSnapshot], depth: int = 10) -> Tuple[float, float]:
-    """
-    Return (avg_bid_vol, avg_ask_vol) averaged across all snapshots.
-    Averaging across N snapshots filters ephemeral spoofing orders.
-    """
-    if not snapshots:
-        return 0.0, 0.0
-
-    bid_totals: List[float] = []
-    ask_totals: List[float] = []
-
-    for snap in snapshots:
-        bid_totals.append(sum(lvl.quantity for lvl in snap.bids[:depth]))
-        ask_totals.append(sum(lvl.quantity for lvl in snap.asks[:depth]))
-
-    return sum(bid_totals) / len(bid_totals), sum(ask_totals) / len(ask_totals)
-
-
-def get_book_imbalance(state: MarketState) -> Tuple[float, str]:
-    """
-    Returns (ratio, direction) where direction is "bid", "ask", or "neutral".
-    ratio is always >= 1.0.
-
-    "bid" with ratio >= OB_IMBALANCE_RATIO → strong buy-side pressure.
-    "ask" with ratio >= OB_IMBALANCE_RATIO → strong sell-side pressure.
-    """
-    recent = list(state.ob_snapshots)[-OB_SNAPSHOTS:]
-    if len(recent) < 2:
-        return 1.0, "neutral"
-
-    avg_bid, avg_ask = _averaged_bid_ask_volume(recent)
-
-    if avg_ask <= 0:
-        return 1.0, "neutral"
-
-    ratio = avg_bid / avg_ask
-
-    if ratio >= OB_IMBALANCE_RATIO:
-        return ratio, "bid"
-    if ratio <= 1.0 / OB_IMBALANCE_RATIO:
-        return 1.0 / ratio, "ask"
-    return ratio, "neutral"

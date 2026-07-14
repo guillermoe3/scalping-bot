@@ -3,14 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 from typing import Callable, Awaitable, List
 
 import websockets
 from websockets.exceptions import ConnectionClosed
 
 from config import WS_STREAM_URL, STREAMS
-from state import MarketState, Candle, BookSnapshot, OrderBookLevel
+from state import MarketState, Candle
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,6 @@ class DataFeed:
         self._candle_1m_handlers: List[_Handler] = []
         self._candle_5m_handlers: List[_Handler] = []
         self._candle_15m_handlers: List[_Handler] = []
-        self._orderbook_handlers: List[_Handler] = []
         self._running = False
         self._reconnect_delay = 1.0
 
@@ -60,9 +58,6 @@ class DataFeed:
 
     def on_candle_15m(self, fn: _Handler) -> None:
         self._candle_15m_handlers.append(fn)
-
-    def on_orderbook(self, fn: _Handler) -> None:
-        self._orderbook_handlers.append(fn)
 
     # --- Lifecycle ---
 
@@ -156,18 +151,12 @@ class DataFeed:
                 await self._emit(self._candle_15m_handlers, candle)
 
     async def _handle_depth(self, d: dict) -> None:
-        bids = [OrderBookLevel(float(b[0]), float(b[1])) for b in d["bids"]]
-        asks = [OrderBookLevel(float(a[0]), float(a[1])) for a in d["asks"]]
-        snapshot = BookSnapshot(bids=bids, asks=asks, timestamp=time.time())
-
-        self.state.ob_snapshots.append(snapshot)
-
+        bids = d.get("bids") or []
+        asks = d.get("asks") or []
         if bids and asks:
-            self.state.last_bid = bids[0].price
-            self.state.last_ask = asks[0].price
-            self.state.spread = asks[0].price - bids[0].price
-
-        await self._emit(self._orderbook_handlers, snapshot)
+            self.state.last_bid = float(bids[0][0])
+            self.state.last_ask = float(asks[0][0])
+            self.state.spread = self.state.last_ask - self.state.last_bid
 
     # --- Helpers ---
 

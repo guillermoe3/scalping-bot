@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List
+from typing import Optional
 from collections import deque
 
-from config import CANDLE_BUFFER, SWING_BUFFER, OB_SNAPSHOT_BUFFER, CVD_CANDLE_BUFFER
+from config import CANDLE_BUFFER, SWING_BUFFER, CVD_CANDLE_BUFFER
 
 
 class Regime(Enum):
@@ -52,19 +52,6 @@ class Candle:
     @property
     def lower_wick(self) -> float:
         return min(self.open, self.close) - self.low
-
-
-@dataclass
-class OrderBookLevel:
-    price: float
-    quantity: float
-
-
-@dataclass
-class BookSnapshot:
-    bids: List[OrderBookLevel]  # sorted descending
-    asks: List[OrderBookLevel]  # sorted ascending
-    timestamp: float
 
 
 @dataclass
@@ -119,9 +106,6 @@ class MarketState:
     # Cumulative Volume Delta (CVD)
     cvd: float = 0.0                  # resets each candle open
     cvd_per_candle: deque = field(default_factory=lambda: deque(maxlen=CVD_CANDLE_BUFFER))
-
-    # Order book (rolling snapshots for anti-spoofing)
-    ob_snapshots: deque = field(default_factory=lambda: deque(maxlen=OB_SNAPSHOT_BUFFER))
 
     # Compression detector (candidate future "calm filter" — no direction;
     # the squeeze entry hypothesis was rejected, see ablation-2026-07-14)

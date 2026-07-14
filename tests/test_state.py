@@ -15,6 +15,11 @@ def test_state_has_no_macro_gate_fields():
     assert not hasattr(state, "macro_blocks_shorts")
 
 
+def test_state_has_no_order_book_snapshot_buffer():
+    state = MarketState()
+    assert not hasattr(state, "ob_snapshots")
+
+
 def test_position_defaults_include_fee_tracking_fields():
     pos = Position(
         side=Side.LONG,
