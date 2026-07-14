@@ -7,5 +7,6 @@ safety_state.json
 .claude/settings.local.json
 .worktrees/
 backtest_cache/
-backtest_runs/
+backtest_runs/*
+!backtest_runs/estudios/
 backtest_trades.csv
