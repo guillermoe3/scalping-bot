@@ -53,3 +53,7 @@ def test_resumen():
     assert r["media"] == pytest.approx(0.00333, abs=1e-4)
     assert r["mediana"] == pytest.approx(0.01)
     assert r["hit_rate"] == pytest.approx(2 / 3)
+
+
+def test_resumen_vacio_devuelve_none():
+    assert resumen([]) == {"n": 0, "media": None, "mediana": None, "hit_rate": None}

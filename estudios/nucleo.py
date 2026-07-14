@@ -55,7 +55,10 @@ def ventana(
 
 
 def retorno_forward(closes: list[float], i: int, horizonte_barras: int) -> Optional[float]:
-    """Forward return from bar i to bar i + horizonte_barras, or None if out of range."""
+    """Forward return from bar i to bar i + horizonte_barras, or None if out of range.
+
+    Caller's responsibility: i must be a valid non-negative index into closes.
+    """
     j = i + horizonte_barras
     if j < 0 or j >= len(closes):
         return None
@@ -69,6 +72,7 @@ def percentil_rodante(
 
     No lookahead: the window is valores[i - ventana_n : i], excluding position i.
     Returns None if there aren't ventana_n prior observations.
+    Caller's responsibility: i must be a valid index into valores (i <= len).
     """
     if i < ventana_n:
         return None
@@ -77,8 +81,14 @@ def percentil_rodante(
 
 
 def resumen(muestras: list[float]) -> dict:
-    """Summary stats for a list of samples: count, mean, median, hit rate (> 0)."""
+    """Summary stats for a list of samples: count, mean, median, hit rate (> 0).
+
+    Empty input yields {"n": 0, "media": None, "mediana": None, "hit_rate": None}
+    so studies can report empty cells without crashing.
+    """
     n = len(muestras)
+    if n == 0:
+        return {"n": 0, "media": None, "mediana": None, "hit_rate": None}
     return {
         "n": n,
         "media": statistics.fmean(muestras),
