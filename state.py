@@ -123,18 +123,10 @@ class MarketState:
     # Order book (rolling snapshots for anti-spoofing)
     ob_snapshots: deque = field(default_factory=lambda: deque(maxlen=OB_SNAPSHOT_BUFFER))
 
-    # Volman squeeze state
+    # Compression detector (candidate future "calm filter" — no direction;
+    # the squeeze entry hypothesis was rejected, see ablation-2026-07-14)
     in_squeeze: bool = False
     squeeze_bar_count: int = 0
-    squeeze_reference_level: float = 0.0
-    squeeze_direction: Optional[Side] = None
-    squeeze_price_above_level: Optional[bool] = None
-
-    # Break-confirmation state (variant B): survives the breakout candle
-    squeeze_broken: bool = False
-    squeeze_broken_direction: Optional[Side] = None
-    squeeze_broken_level: float = 0.0
-    squeeze_broken_ttl: int = 0
 
     # Momentum
     volume_velocity: float = 0.0        # BTC/sec in current candle
