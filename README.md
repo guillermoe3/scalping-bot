@@ -1,8 +1,8 @@
 # BTC Scalping Bot
 
-An asyncio Python bot that trades BTC/USDT on Binance Futures using a discretionary-style
-price-action scalping strategy (regime detection, compression/breakout entries, trend filters,
-order-flow confirmation, and ATR-based risk management). Includes a backtesting
+An asyncio Python bot for trading BTC/USDT on Binance Futures: regime detection, an entry gate
+harness (spread/trend/CVD), ATR-based risk management, post-only maker execution and safety
+rails — currently with **no adopted entry trigger** (see below). Includes a backtesting
 harness that replays real historical Binance data through the exact same strategy code used live.
 
 > **Disclaimer:** This is a research/educational project. Trading cryptocurrency carries
@@ -20,14 +20,23 @@ harness that replays real historical Binance data through the exact same strateg
    - `BREAKOUT` — a large-bodied candle (>= 1.5x ATR)
    - `TIGHT_CHANNEL` — low-volatility, trending compression
    - `TRADING_RANGE` — two-sided range, confirmed by liquidity sweeps at both extremes
-2. **The Squeeze** (`signals.py`) — a Volman-style compression pattern: price tightens up
-   against a recent swing high/low, signaling absorption before a breakout into that level.
-3. **Entry gating** (`signals.py: check_entry_signal`) — a trade only fires when *all* of these
-   align: known regime, active squeeze with a defined direction, an acceptable spread, no
-   opposing 1h-equivalent trend (EMA-80 on 15m closes), no macro block (BTC/SPY correlation
-   filter), breakout-direction agreement when in a `BREAKOUT` regime, no CVD divergence against
-   the trade, and no opposing order-book imbalance. Signals are evaluated on 15m candle closes
-   (the signal timeframe).
+2. **Entry signal** (`signals.py: check_entry_signal`)
+
+   **Current signal status: no entry trigger is adopted.** The original squeeze
+   hypothesis was rejected with pre-registered criteria after a clean ablation
+   (`backtest_runs/ablation-2026-07-14.md`); the bot deliberately does not trade
+   until a new signal passes the base-rate studies and the ablation harness
+   (see `docs/superpowers/specs/2026-07-14-ciclo-limpieza-y-estudios-tasa-base-design.md`).
+   Risk management, execution (post-only maker entries), safety rails and the
+   backtest harness remain fully operational.
+3. **Entry gate harness** (`signals.py: _passes_gates`) — kept fully wired and unit-tested so
+   the next adopted signal has a reusable, backtest=live-consistent set of gates to run
+   through: an acceptable spread, no opposing 1h-equivalent trend (EMA-80 on 15m closes), and
+   no CVD divergence against the trade. The CVD gate is implemented but disabled by default
+   (the 2026-07-14 ablation showed it vetoing good trades); it can be re-enabled per run via
+   `backtest.py --enable-gate cvd`. The macro filter (BTC/SPY correlation) and the order-book
+   imbalance gate were both removed — neither could be exercised by the backtest engine, which
+   made their live behaviour unauditable.
 4. **Risk management** (`risk.py`) — fixed-fractional sizing (0.5% account risk per trade),
    ATR-based stop loss and a 2R first target, 50% partial close at TP1, a breakeven stop after
    0.8 ATR of profit, ATR "breathing" stop expansion if volatility grows, a structural
@@ -60,10 +69,9 @@ clock that backtests can fast-forward deterministically over simulated event tim
 | `data_feed.py` | Live Binance WebSocket feed (trades, klines, order book) |
 | `indicators.py` | ATR, regime-aware EMA, swing point detection |
 | `regime.py` | Regime state machine + 1h-equivalent trend bias |
-| `signals.py` | Squeeze detection + entry signal gating |
+| `signals.py` | Entry signal (currently none adopted) + the gate harness (spread/trend/CVD) |
 | `momentum.py` | Volume velocity tracking + momentum-collapse abort |
-| `order_flow.py` | CVD divergence + order book imbalance detection |
-| `context.py` | Macro filter (BTC/SPY correlation, via `yfinance`) |
+| `order_flow.py` | CVD divergence detection |
 | `risk.py` | Position sizing, stop/target levels, dynamic stop management |
 | `execution.py` | Order routing (paper/live) via `ExecutionEngine` |
 | `safety.py` | State persistence, daily kill switch, exchange reconciliation |
