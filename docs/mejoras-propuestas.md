@@ -243,3 +243,36 @@ no mala suerte de muestreo. Cualquier trabajo futuro de señal debería partir
 de una hipótesis nueva y pasar por este mismo harness (que queda mergeado y
 reutilizable) antes de tocar producción. P0-3 (cost gate) pierde urgencia:
 sin señal rentable no hay costo que optimizar.
+
+**Corrección (2026-07-14, autopsia + fix del trail + re-corrida — reporte:
+`backtest_runs/ablation-2026-07-14.md`, autopsia:
+`backtest_runs/autopsia-2026-07-13/autopsia-trades.md`):** la autopsia de
+trades encontró que los números del bloque anterior estaban contaminados
+por un bug de ejecución: `_apply_structural_trail()` (risk.py) arrastraba
+el stop a un swing reciente sin comprobar que quedara del lado correcto del
+precio actual, y `manage_position()` chequea `sl_hit` en el mismo tick →
+27/28 trades de A morían en <1 segundo pagando solo spread+fees (el 0% de
+aciertos era artificial: el 94.8% de la pérdida de A eran comisiones de
+salidas instantáneas). Con la guarda arreglada (commit 34da953, tests de
+regresión failing-first) la matriz de 12 corridas se re-corrió completa:
+
+- **Variante A (fade):** 25 trades, 32% de aciertos, -$248.69, PF 0.30
+  (duración mediana 45 min; 15/25 salidas por momentum_abort).
+- **Variante B (break):** 47 trades, 27.7% de aciertos, -$574.12, PF 0.29.
+- **Veredicto pre-registrado (P&L neto > 0 y ≥ 30 trades): NO se adopta
+  ninguna** — igual que antes, pero ahora la medición es limpia.
+- `trend_1h` sigue siendo el único gate claramente informativo (quitarlo:
+  A cae a -$1.294,75 con 83 trades). Novedad: quitar `cvd` *mejora* la
+  variante A (31 trades, -$199.39, PF 0.51) — sigue perdedora, pero
+  sugiere que ese gate veta trades buenos.
+
+La conclusión de fondo se sostiene, ahora con doble evidencia
+independiente: la ablación limpia y las tasas base de la autopsia (sin
+operar: dirección post-squeeze ~50/50, y SIN expansión de volatilidad —
+|retorno| a +16 velas 0,417% vs 0,573% incondicional; la premisa
+compresión→explosión falla también a nivel base). La pista más fuerte para
+la hipótesis nueva es continuación/pullback a favor de la tendencia 1h:
+los 4 únicos ganadores del dataset original eran aligned (4/45 vs 0/33
+counter) y trend_1h es el único gate que aporta. El reporte versionado
+`ablation-2026-07-13.md` queda obsoleto (números del bug); la evidencia
+vigente es `ablation-2026-07-14.md`.
