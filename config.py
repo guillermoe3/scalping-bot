@@ -52,10 +52,6 @@ MOMENTUM_ABORT_MINUTES = 45   # 3 bars of 15m
 # Higher-timeframe trend filter: EMA over 15m closes approximating a 20-period 1h EMA
 TREND_EMA_1H_ON_15M = 80
 
-# Macro / context filter
-CORRELATION_BLOCK_THRESHOLD = 0.8  # block longs if BTC-SPY correlation > this
-MACRO_UPDATE_SECONDS = 300         # refresh macro data every 5 min
-
 # Buffer sizes
 CANDLE_BUFFER = 200
 SWING_BUFFER = 20

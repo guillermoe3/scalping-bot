@@ -135,10 +135,6 @@ class MarketState:
     # Higher-timeframe trend bias
     trend_1h: Optional[Side] = None
 
-    # Macro context gates
-    macro_blocks_longs: bool = False
-    macro_blocks_shorts: bool = False
-
     # Open position
     position: Optional[Position] = None
 

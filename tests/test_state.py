@@ -9,6 +9,12 @@ def test_market_state_defaults_include_safety_fields():
     assert state.daily_starting_balance is None
 
 
+def test_state_has_no_macro_gate_fields():
+    state = MarketState()
+    assert not hasattr(state, "macro_blocks_longs")
+    assert not hasattr(state, "macro_blocks_shorts")
+
+
 def test_position_defaults_include_fee_tracking_fields():
     pos = Position(
         side=Side.LONG,
