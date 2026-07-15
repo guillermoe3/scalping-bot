@@ -43,17 +43,20 @@ def detectar_eventos(funding: list[list]) -> list[tuple[int, str]]:
 
     extremo(i) = percentil_rodante(rates, i, 90, rates[i]) > 0.90 ("alta")
                  or < 0.10 ("baja")
-    evento si extremo(i) y no extremo(i-1). i-1 with an incomplete window
-    (fewer than 90 priors) counts as "not extreme".
+    evento si extremo(i) y no extremo(i-1). extremo is BOOLEAN (in EITHER
+    tail): a direct alta<->baja flip is two consecutive extreme readings and
+    is NOT a new event. i-1 with an incomplete window (fewer than 90 priors)
+    counts as "not extreme".
     """
     rates = [r[1] for r in funding]
     eventos: list[tuple[int, str]] = []
-    cola_previa: str | None = None
+    extremo_previo = False
     for i in range(len(rates)):
         cola_actual = _cola_extremo(rates, i)
-        if cola_actual is not None and cola_actual != cola_previa:
+        extremo_actual = cola_actual is not None
+        if extremo_actual and not extremo_previo:
             eventos.append((i, cola_actual))
-        cola_previa = cola_actual
+        extremo_previo = extremo_actual
     return eventos
 
 
@@ -71,7 +74,9 @@ def retornos_firmados(
     """Signed forward returns for each event.
 
     Anchor: the 15m kline whose ts == ts_funding - 900_000 (the bar that
-    CLOSES at the funding timestamp). Events without that anchor bar are
+    CLOSES at the funding timestamp). Real funding timestamps carry ms-level
+    jitter off the 15m grid, so ts_funding is floored to the 900_000 ms grid
+    BEFORE subtracting the anchor offset. Events without that anchor bar are
     skipped. Signing: "alta" (crowded longs) -> SHORT thesis -> -retorno;
     "baja" (crowded shorts) -> LONG thesis -> +retorno.
     """
@@ -80,7 +85,7 @@ def retornos_firmados(
     firmados: list[float] = []
     for idx_funding, cola in eventos:
         ts_funding = funding[idx_funding][0]
-        ts_ancla = ts_funding - ANCLA_OFFSET_MS
+        ts_ancla = (ts_funding // ANCLA_OFFSET_MS) * ANCLA_OFFSET_MS - ANCLA_OFFSET_MS
         idx_ancla = indice_ts.get(ts_ancla)
         if idx_ancla is None:
             continue
@@ -126,14 +131,19 @@ PREREGISTRO = {
     "evento": (
         "cruce de entrada a la cola: percentil_rodante(rates, i, 90, rates[i]) > 0.90 "
         "(alta) o < 0.10 (baja) sobre las 90 lecturas de funding previas; evento si "
-        "extremo(i) y no extremo(i-1)"
+        "extremo(i) y no extremo(i-1); extremo es booleano (cualquiera de las dos "
+        "colas): un flip directo alta<->baja NO es evento nuevo"
     ),
     "ventana_funding": (
         "funding filtrado por ventana(modo) ANTES de detectar eventos; las primeras "
         "~90 lecturas de funding dentro de cualquier ventana no pueden ser eventos "
         "(no tienen ventana rodante completa) — aceptado y documentado, no es un bug"
     ),
-    "ancla": "vela 15m cuyo ts == ts_funding - 900_000 (la que CIERRA en el funding); si falta, se descarta el evento",
+    "ancla": (
+        "vela 15m cuyo ts == ts_funding - 900_000 (la que CIERRA en el funding); "
+        "ts_funding se pisa a la grilla de 900_000 ms antes de restar (los ts reales "
+        "traen jitter de ms); si falta la vela, se descarta el evento"
+    ),
     "horizontes": "8h=32 barras, 24h=96 barras, 72h=288 barras (barras de 15m)",
     "firma": "cola alta (longs crowded) -> tesis SHORT -> retorno * -1; cola baja -> tesis LONG -> retorno * +1",
     "n_minimo_calibracion": "150 por cola por simbolo",
