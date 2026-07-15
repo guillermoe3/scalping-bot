@@ -1,0 +1,60 @@
+{
+  "preregistro": {
+    "rol": "estudio de reversion post-movimiento extremo (C3)",
+    "alcance": "solo BTC; ETH sin ticks futures locales para validar taker_buy queda fuera de C3 (spec)",
+    "datos": "klines 15m futures um BTCUSDT, 2026-03 -> 2026-06 (2026-03 solo alimenta la ventana de sigma)",
+    "eventos_desde": "2026-04-01T00:00:00Z (los candidatos a evento se recortan; los datos de sigma no)",
+    "evento": "ret[i] = (c[i]-c[i-1])/c[i-1]; sigma = stdev de los 96 retornos 15m previos (retornos, no precios; sin lookahead; requiere i >= 97 y vol > 0); |ret[i]| > 3*sigma y flujo unidireccional: |2*taker_buy[i] - vol[i]| / vol[i] >= 0.6",
+    "split": "corte propio C3 = 2026-06-01T00:00:00Z (corte_ms=1780272000000), NO el corte global 2025",
+    "horizontes": "1h=4 barras, 4h=16 barras, 8h=32 barras (barras de 15m)",
+    "firma": "retorno forward CONTRA la direccion del movimiento: firmado = -direccion * retorno_forward(...)",
+    "n_minimo_calibracion": "regla dura: n_total < 50 -> conclusiones permitidas: solo 'descartar' o 'extender datos'"
+  },
+  "celdas": 6,
+  "resultados": {
+    "BTCUSDT": {
+      "alcista": {
+        "1h": {
+          "n": 0,
+          "media": null,
+          "mediana": null,
+          "hit_rate": null
+        },
+        "4h": {
+          "n": 0,
+          "media": null,
+          "mediana": null,
+          "hit_rate": null
+        },
+        "8h": {
+          "n": 0,
+          "media": null,
+          "mediana": null,
+          "hit_rate": null
+        }
+      },
+      "bajista": {
+        "1h": {
+          "n": 0,
+          "media": null,
+          "mediana": null,
+          "hit_rate": null
+        },
+        "4h": {
+          "n": 0,
+          "media": null,
+          "mediana": null,
+          "hit_rate": null
+        },
+        "8h": {
+          "n": 0,
+          "media": null,
+          "mediana": null,
+          "hit_rate": null
+        }
+      },
+      "n_total": 0,
+      "nota": "n_total=0 < 50: conclusiones permitidas: solo 'descartar' o 'extender datos'"
+    }
+  }
+}

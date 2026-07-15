@@ -1,0 +1,107 @@
+# funding-verificacion
+
+## Pre-registro
+
+- rol: apuesta principal del ciclo (C1)
+- datos: klines 15m + funding futures um, 2020-01 -> 2026-06 (mes corriente sin dump)
+- evento: cruce de entrada a la cola: percentil_rodante(rates, i, 90, rates[i]) > 0.90 (alta) o < 0.10 (baja) sobre las 90 lecturas de funding previas; evento si extremo(i) y no extremo(i-1); extremo es booleano (cualquiera de las dos colas): un flip directo alta<->baja NO es evento nuevo
+- ventana_funding: funding filtrado por ventana(modo) ANTES de detectar eventos; las primeras ~90 lecturas de funding dentro de cualquier ventana no pueden ser eventos (no tienen ventana rodante completa) — aceptado y documentado, no es un bug
+- ancla: vela 15m cuyo ts == ts_funding - 900_000 (la que CIERRA en el funding); ts_funding se pisa a la grilla de 900_000 ms antes de restar (los ts reales traen jitter de ms); si falta la vela, se descarta el evento
+- horizontes: 8h=32 barras, 24h=96 barras, 72h=288 barras (barras de 15m)
+- firma: cola alta (longs crowded) -> tesis SHORT -> retorno * -1; cola baja -> tesis LONG -> retorno * +1
+- n_minimo_calibracion: 150 por cola por simbolo
+- umbral_adopcion: mediana firmada >= 0.14% Y media mismo signo Y hit_rate > 50% en calibracion, sostenido en verificacion (mismo signo, magnitud >= 1/2 de calibracion)
+- decision: solo BTC adopta/veta; ETH es robustez
+
+Celdas miradas: 12
+
+## Resultados
+
+```json
+{
+  "BTCUSDT": {
+    "alta": {
+      "8h": {
+        "n": 72,
+        "media": 0.000164696368648183,
+        "mediana": -0.0013645725860770813,
+        "hit_rate": 0.4305555555555556
+      },
+      "24h": {
+        "n": 71,
+        "media": 0.0015479595778686579,
+        "mediana": 0.0018243326783097377,
+        "hit_rate": 0.5211267605633803
+      },
+      "72h": {
+        "n": 70,
+        "media": 0.00202806658770625,
+        "mediana": 0.0017976398132520974,
+        "hit_rate": 0.5285714285714286
+      }
+    },
+    "baja": {
+      "8h": {
+        "n": 126,
+        "media": -0.0022966284550351135,
+        "mediana": -0.0022154387103372683,
+        "hit_rate": 0.36507936507936506
+      },
+      "24h": {
+        "n": 126,
+        "media": -0.0034875132109659806,
+        "mediana": -0.0015297549558549207,
+        "hit_rate": 0.4126984126984127
+      },
+      "72h": {
+        "n": 126,
+        "media": -0.0006234050781100832,
+        "mediana": -0.00012466897239316784,
+        "hit_rate": 0.5
+      }
+    }
+  },
+  "ETHUSDT": {
+    "alta": {
+      "8h": {
+        "n": 63,
+        "media": -0.0015406304256738196,
+        "mediana": -0.002282520872609664,
+        "hit_rate": 0.4126984126984127
+      },
+      "24h": {
+        "n": 63,
+        "media": 0.0027363635447775893,
+        "mediana": 0.005189682096694339,
+        "hit_rate": 0.5714285714285714
+      },
+      "72h": {
+        "n": 63,
+        "media": -0.007584283202397111,
+        "mediana": -0.002167047276614371,
+        "hit_rate": 0.4444444444444444
+      }
+    },
+    "baja": {
+      "8h": {
+        "n": 111,
+        "media": -0.005726639199944983,
+        "mediana": -0.0005403872477541713,
+        "hit_rate": 0.46846846846846846
+      },
+      "24h": {
+        "n": 111,
+        "media": -0.004122985145618304,
+        "mediana": -0.0008132962119294202,
+        "hit_rate": 0.4864864864864865
+      },
+      "72h": {
+        "n": 111,
+        "media": -0.004699972783483897,
+        "mediana": -0.0033248325666753627,
+        "hit_rate": 0.45045045045045046
+      }
+    }
+  }
+}
+```
