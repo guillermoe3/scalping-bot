@@ -1,5 +1,3 @@
-import pytest
-
 from estudios.estudio_cascadas import detectar_cascadas
 
 

@@ -11,8 +11,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List
 
 CACHE_DIR = "backtest_cache"
 BASE_URL = "https://data.binance.vision/data/futures/um/monthly/fundingRate"

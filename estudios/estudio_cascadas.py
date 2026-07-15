@@ -57,6 +57,8 @@ def detectar_cascadas(rows: list[list]) -> list[tuple[int, int]]:
             continue
         ventana_retornos = retornos[i - VENTANA_SIGMA : i]
         sigma = statistics.stdev(ventana_retornos)
+        # Float-degeneracy safety guard (all 96 prior returns bit-identical) —
+        # never fires on real data. Not a pre-registered spec filter.
         if sigma == 0:
             continue
         ret_i = retornos[i]
@@ -93,6 +95,10 @@ def estudiar(symbol: str, modo: str, verificacion_habilitada: bool) -> dict:
     rows_completas = cargar_klines(symbol, "2026-03", "2026-07")
     # 2026-03 stays IN the split so the 96-bar sigma window can reach back
     # into it; only the event CANDIDATES are trimmed to >= 2026-04-01 below.
+    # Note: in verificacion mode, ventana() returns only rows >= corte_ms with
+    # no lead-in, so the first ~97 bars after the cutoff can't produce events
+    # (sigma burn-in) — unlike calibracion, which gets a full lead-in month.
+    # Materially irrelevant at n=1 but documented here for symmetry.
     rows = ventana(
         rows_completas,
         modo,

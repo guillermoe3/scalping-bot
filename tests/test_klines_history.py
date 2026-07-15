@@ -1,5 +1,3 @@
-import pytest
-
 import klines_history
 from klines_history import build_url, parse_klines_csv
 

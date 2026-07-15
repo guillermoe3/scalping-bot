@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--symbols", required=True)
     args = parser.parse_args(argv)
 
-    symbols = args.symbols.split(",")
+    symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     resultados = {
         symbol: estudiar_symbol(symbol, args.modo, args.verificacion)
         for symbol in symbols

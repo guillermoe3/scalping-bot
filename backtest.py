@@ -43,13 +43,13 @@ def parse_args(argv) -> argparse.Namespace:
     parser.add_argument("--spread-pct", type=float, default=BACKTEST_SYNTHETIC_SPREAD_PCT)
     parser.add_argument("--out", default="backtest_trades.csv")
     parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--label", default=None, help="Etiqueta corta para identificar la corrida en el comparador")
+    parser.add_argument("--label", default=None, help="Short label to identify the run in the comparator")
     parser.add_argument("--disable-gate", action="append", default=None,
                         choices=signals.GATE_NAMES, dest="disable_gate",
-                        help="Apaga un gate de entrada (repetible)")
+                        help="Disable an entry gate (repeatable)")
     parser.add_argument("--enable-gate", action="append", default=None,
                         choices=signals.GATE_NAMES, dest="enable_gate",
-                        help="Re-enciende un gate desactivado por default (repetible)")
+                        help="Re-enable a gate disabled by default (repeatable)")
     parser.add_argument("--squeeze-compression", type=float, default=config.SQUEEZE_COMPRESSION_ATR)
     parser.add_argument("--squeeze-min-bars", type=int, default=config.SQUEEZE_MIN_BARS)
     return parser.parse_args(argv)

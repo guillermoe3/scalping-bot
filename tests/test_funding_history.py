@@ -1,8 +1,6 @@
 import gzip
 import json
 
-import pytest
-
 import funding_history
 from funding_history import build_url, parse_funding_csv
 
