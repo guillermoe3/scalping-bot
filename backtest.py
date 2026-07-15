@@ -43,12 +43,13 @@ def parse_args(argv) -> argparse.Namespace:
     parser.add_argument("--spread-pct", type=float, default=BACKTEST_SYNTHETIC_SPREAD_PCT)
     parser.add_argument("--out", default="backtest_trades.csv")
     parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--label", default=None, help="Etiqueta corta para identificar la corrida en el comparador")
-    parser.add_argument("--variant", choices=("fade", "break"), default="fade",
-                        help="Modelo de entrada: fade (anticipado) o break (confirmación de ruptura)")
+    parser.add_argument("--label", default=None, help="Short label to identify the run in the comparator")
     parser.add_argument("--disable-gate", action="append", default=None,
                         choices=signals.GATE_NAMES, dest="disable_gate",
-                        help="Apaga un gate de entrada (repetible)")
+                        help="Disable an entry gate (repeatable)")
+    parser.add_argument("--enable-gate", action="append", default=None,
+                        choices=signals.GATE_NAMES, dest="enable_gate",
+                        help="Re-enable a gate disabled by default (repeatable)")
     parser.add_argument("--squeeze-compression", type=float, default=config.SQUEEZE_COMPRESSION_ATR)
     parser.add_argument("--squeeze-min-bars", type=int, default=config.SQUEEZE_MIN_BARS)
     return parser.parse_args(argv)
@@ -70,8 +71,9 @@ async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
 
     config.SQUEEZE_COMPRESSION_ATR = args.squeeze_compression
     config.SQUEEZE_MIN_BARS = args.squeeze_min_bars
-    signals.ENTRY_VARIANT = args.variant
-    signals.DISABLED_GATES = set(args.disable_gate or ())
+    signals.DISABLED_GATES = (
+        set(signals.DEFAULT_DISABLED_GATES) | set(args.disable_gate or ())
+    ) - set(args.enable_gate or ())
     signals.reset_signal_stats()
 
     _, state_file_path = tempfile.mkstemp(prefix="backtest_safety_state_", suffix=".json")
@@ -100,7 +102,6 @@ async def run_backtest(args: argparse.Namespace, exchange=None) -> dict:
         "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "duration_seconds": round(time.monotonic() - t0, 1),
         "format_version": 1,
-        "variant": args.variant,
         "disabled_gates": sorted(signals.DISABLED_GATES),
         "squeeze_compression": args.squeeze_compression,
         "squeeze_min_bars": args.squeeze_min_bars,

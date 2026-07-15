@@ -32,10 +32,6 @@ SQUEEZE_LEVEL_ATR_PROXIMITY = 0.5  # must be within 0.5 ATR of key level
 # CVD divergence
 CVD_DIVERGENCE_LOOKBACK = 5
 
-# Order book anti-spoofing
-OB_SNAPSHOTS = 5              # average this many snapshots
-OB_IMBALANCE_RATIO = 2.0      # 2:1 bid/ask volume = imbalance signal
-
 # Risk management
 ACCOUNT_RISK_PCT = 0.005      # 0.5% account equity risked per trade
 INITIAL_SL_ATR = 1.5          # initial stop = 1.5x ATR from entry
@@ -52,14 +48,9 @@ MOMENTUM_ABORT_MINUTES = 45   # 3 bars of 15m
 # Higher-timeframe trend filter: EMA over 15m closes approximating a 20-period 1h EMA
 TREND_EMA_1H_ON_15M = 80
 
-# Macro / context filter
-CORRELATION_BLOCK_THRESHOLD = 0.8  # block longs if BTC-SPY correlation > this
-MACRO_UPDATE_SECONDS = 300         # refresh macro data every 5 min
-
 # Buffer sizes
 CANDLE_BUFFER = 200
 SWING_BUFFER = 20
-OB_SNAPSHOT_BUFFER = 10
 CVD_CANDLE_BUFFER = 20
 
 # Daily kill switch

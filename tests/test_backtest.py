@@ -135,11 +135,12 @@ def test_run_backtest_never_touches_the_real_safety_state_file(tmp_path):
 def test_parse_args_accepts_ablation_flags():
     args = backtest.parse_args([
         "--start", "2026-04-01", "--end", "2026-04-02",
-        "--variant", "break", "--disable-gate", "cvd", "--disable-gate", "trend_1h",
+        "--disable-gate", "cvd", "--disable-gate", "trend_1h",
+        "--enable-gate", "cvd",
         "--squeeze-compression", "0.6", "--squeeze-min-bars", "2",
     ])
-    assert args.variant == "break"
     assert args.disable_gate == ["cvd", "trend_1h"]
+    assert args.enable_gate == ["cvd"]
     assert args.squeeze_compression == 0.6
     assert args.squeeze_min_bars == 2
 
@@ -162,7 +163,7 @@ def test_run_records_ablation_params_in_meta_and_gate_stats_in_summary(tmp_path)
 
     rc = backtest.main(
         ["--start", START, "--end", END, "--out", str(tmp_path / "t.csv"),
-         "--label", "abl-test", "--variant", "break", "--disable-gate", "cvd",
+         "--label", "abl-test", "--disable-gate", "cvd",
          "--squeeze-compression", "0.6", "--squeeze-min-bars", "2"],
         exchange=exchange,
     )
@@ -174,7 +175,6 @@ def test_run_records_ablation_params_in_meta_and_gate_stats_in_summary(tmp_path)
     run = os.path.join(backtest.RUNS_DIR, run_dirs[0])
 
     meta = json.load(open(os.path.join(run, "meta.json")))
-    assert meta["variant"] == "break"
     assert meta["disabled_gates"] == ["cvd"]
     assert meta["squeeze_compression"] == 0.6
     assert meta["squeeze_min_bars"] == 2

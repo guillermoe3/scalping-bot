@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List
+from typing import Optional
 from collections import deque
 
-from config import CANDLE_BUFFER, SWING_BUFFER, OB_SNAPSHOT_BUFFER, CVD_CANDLE_BUFFER
+from config import CANDLE_BUFFER, SWING_BUFFER, CVD_CANDLE_BUFFER
 
 
 class Regime(Enum):
@@ -52,19 +52,6 @@ class Candle:
     @property
     def lower_wick(self) -> float:
         return min(self.open, self.close) - self.low
-
-
-@dataclass
-class OrderBookLevel:
-    price: float
-    quantity: float
-
-
-@dataclass
-class BookSnapshot:
-    bids: List[OrderBookLevel]  # sorted descending
-    asks: List[OrderBookLevel]  # sorted ascending
-    timestamp: float
 
 
 @dataclass
@@ -120,21 +107,10 @@ class MarketState:
     cvd: float = 0.0                  # resets each candle open
     cvd_per_candle: deque = field(default_factory=lambda: deque(maxlen=CVD_CANDLE_BUFFER))
 
-    # Order book (rolling snapshots for anti-spoofing)
-    ob_snapshots: deque = field(default_factory=lambda: deque(maxlen=OB_SNAPSHOT_BUFFER))
-
-    # Volman squeeze state
+    # Compression detector (candidate future "calm filter" — no direction;
+    # the squeeze entry hypothesis was rejected, see ablation-2026-07-14)
     in_squeeze: bool = False
     squeeze_bar_count: int = 0
-    squeeze_reference_level: float = 0.0
-    squeeze_direction: Optional[Side] = None
-    squeeze_price_above_level: Optional[bool] = None
-
-    # Break-confirmation state (variant B): survives the breakout candle
-    squeeze_broken: bool = False
-    squeeze_broken_direction: Optional[Side] = None
-    squeeze_broken_level: float = 0.0
-    squeeze_broken_ttl: int = 0
 
     # Momentum
     volume_velocity: float = 0.0        # BTC/sec in current candle
@@ -142,10 +118,6 @@ class MarketState:
 
     # Higher-timeframe trend bias
     trend_1h: Optional[Side] = None
-
-    # Macro context gates
-    macro_blocks_longs: bool = False
-    macro_blocks_shorts: bool = False
 
     # Open position
     position: Optional[Position] = None

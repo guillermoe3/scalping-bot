@@ -1,4 +1,8 @@
-from data_feed import update_live_candles
+import asyncio
+
+import pytest
+
+from data_feed import DataFeed, update_live_candles
 from state import Candle, MarketState
 
 
@@ -49,3 +53,14 @@ def test_update_live_candles_updates_all_three_timeframes_at_once():
     assert state.live_1m.volume == 3.0
     assert state.live_5m.volume == 3.0
     assert state.live_15m.volume == 3.0
+
+
+def test_handle_depth_updates_top_of_book_only():
+    state = MarketState()
+    feed = DataFeed(state)
+    payload = {"bids": [["100.0", "2.0"], ["99.5", "1.0"]],
+               "asks": [["100.5", "3.0"], ["101.0", "1.0"]]}
+    asyncio.run(feed._handle_depth(payload))
+    assert state.last_bid == 100.0
+    assert state.last_ask == 100.5
+    assert state.spread == pytest.approx(0.5)

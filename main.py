@@ -7,7 +7,6 @@ import sys
 
 from dotenv import load_dotenv
 
-from context import MacroFilter
 from data_feed import DataFeed
 from execution import ExecutionEngine, PAPER_MODE
 from indicators import detect_swing_points, update_indicators
@@ -102,8 +101,6 @@ async def run() -> None:
     engine = ExecutionEngine(
         state, on_trade_closed=on_trade_closed, on_trade_opened=notifier.notify_trade_opened,
     )
-    macro = MacroFilter(state)
-
     if not PAPER_MODE:
         safety.reconcile_with_exchange(state, engine.exchange)
         await engine.cancel_open_orders()
@@ -116,7 +113,6 @@ async def run() -> None:
 
     await asyncio.gather(
         feed.connect(),
-        macro.run(),
         notifier.run(),
     )
 

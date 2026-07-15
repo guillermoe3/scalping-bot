@@ -90,6 +90,12 @@ def after_trade_closed(state: MarketState, total_trade_net: float) -> None:
         if state.daily_starting_balance is not None
         else PAPER_BALANCE_USDT
     )
+    # NOTE: pnl_today is REALIZED PnL only. This is safe today because the bot
+    # holds at most one position and this check runs at full close (no open
+    # position exists here, so unrealized PnL is zero by construction), and
+    # new entries are blocked while any position or pending entry exists.
+    # If multi-position support or force-close-on-kill is ever added, this
+    # check MUST switch to total equity (balance + unrealized).
     daily_loss_breached = state.pnl_today <= -KILL_SWITCH_DAILY_LOSS_PCT * balance
     streak_breached = state.consecutive_losses >= KILL_SWITCH_CONSECUTIVE_LOSSES
 

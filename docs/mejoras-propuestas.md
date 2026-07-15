@@ -276,3 +276,23 @@ los 4 únicos ganadores del dataset original eran aligned (4/45 vs 0/33
 counter) y trend_1h es el único gate que aporta. El reporte versionado
 `ablation-2026-07-13.md` queda obsoleto (números del bug); la evidencia
 vigente es `ablation-2026-07-14.md`.
+
+**Ciclo limpieza + estudios de tasa base (2026-07, spec:
+`docs/superpowers/specs/2026-07-14-ciclo-limpieza-y-estudios-tasa-base-design.md`):**
+pipeline limpiado (squeeze retirado como disparador, gates reducidos a
+spread/trend_1h con cvd desactivado por default, macro y ob_imbalance
+eliminados, invariante backtest=live como test permanente); datos extendidos
+(funding 2020→hoy y klines 15m multi-año, BTC+ETH); estudios C2/C1/C3
+corridos con pre-registro. Veredicto: `backtest_runs/estudios/veredicto-2026-07.md`.
+Resultado: **C1 NO PASA** (la tesis "comprar con funding extremo negativo"
+cumplía el umbral en calibración 2020-2024 a 24h/72h, pero invierte el signo
+en verificación 2025→presente; ETH robustez coherente con el fracaso), C2
+entregado como insumo (ninguna celda horaria se acerca a costos), C3 **N
+INSUFICIENTE** (1 evento en 5 meses: la definición conjunta z>3 + flujo ≥0.6
+casi nunca ocurre). Por criterio de salida pre-registrado: no se prueban más
+combinaciones intradía; queda abierta la decisión de Guille entre el plan B
+momentum multi-día (`docs/revisiones/insights-momentum-multidia-btc.md`) o
+congelar la búsqueda de señal conservando la infraestructura. Hallazgo de
+datos (Task 6): el cache de ticks del replay de backtest es de SPOT mientras
+el bot opera FUTUROS — ablaciones futuras deberían descargar aggTrades de
+futuros desde data.binance.vision antes de confiar en diferencias finas.
