@@ -137,13 +137,17 @@ anteriores.
 ## Arquitectura
 
 - `estudios/estudio_histeresis.py` (nuevo): mismo esqueleto CLI que
-  `estudio_momentum.py` (`--parametro` para X, `--modo calibracion|verificacion`,
-  `--verificacion` como gate explícito), reporte vía el mismo patrón de
-  `escribir_reporte` con el pre-registro verbatim.
-- `estudios/nucleo.py`: se agregan `posiciones_tsmom_banda` y
-  `cambios_de_posicion` sin tocar ninguna función existente. Se agrega
-  `CORTE_HISTERESIS_MS = 1751328000000` junto a las otras constantes
-  `CORTE_*_MS`.
+  `estudio_momentum.py` (`--modo calibracion|verificacion`, `--verificacion`
+  como gate explícito), reporte vía el mismo patrón de `escribir_reporte`
+  con el pre-registro verbatim. Contiene `posiciones_tsmom_banda` — sigue la
+  convención ya establecida en el repo (`posiciones_tsmom` vive en
+  `estudio_momentum.py`, `posiciones_ma` en `estudio_ma.py`: las políticas
+  de posición específicas de un estudio viven en el archivo del estudio;
+  `nucleo.py` solo tiene señal cruda y métricas genéricas).
+- `estudios/nucleo.py`: se agrega `cambios_de_posicion` (métrica genérica,
+  igual categoría que `sharpe_anualizado`/`max_drawdown`) sin tocar ninguna
+  función existente. Se agrega `CORTE_HISTERESIS_MS = 1751328000000` junto a
+  las otras constantes `CORTE_*_MS`.
 - Sin dependencias nuevas, sin pandas/numpy — mismo criterio que el ciclo
   anterior (volumen de datos trivial).
 
