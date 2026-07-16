@@ -1,0 +1,64 @@
+{
+  "preregistro": {
+    "rol": "Ciclo diseno de senal — banda muerta sobre TSMOM k=14 (spec 2026-07-16)",
+    "datos": "klines 1d SPOT Binance, 2017-08 -> mes corriente exclusivo, BTC unicamente",
+    "senal": "banda muerta simetrica sobre ret[t-14,t]: entra largo si ret > x, pasa a flat si ret <= -x, si cae en (-x, x] mantiene la posicion del dia anterior (primer dia evaluable sin previa: flat)",
+    "grilla_x": "0.0, 0.02, 0.05, 0.08 (fraccion); x=0.0 es control de sanidad, degenera en TSMOM k=14 long_flat sin banda",
+    "split": "calibracion 2017-08 -> 2025-06; verificacion 2025-07 -> presente (sellada, ventana NUEVA); corte_ms=1751328000000",
+    "burn_in": "en verificacion, los 14 dias previos al corte solo alimentan la senal",
+    "umbral_adopcion": "para cada x>0, comparado contra el control x=0.0 de la MISMA ventana, en calibracion Y verificacion por separado: cambios_de_posicion(x) < cambios_de_posicion(control), Y sharpe(x) >= sharpe(control), Y max_drawdown(x) <= max_drawdown(control). 'Casi' = NO PASA.",
+    "criterio_salida": "si algun x>0 pasa en ambas ventanas -> se adopta el de mayor reduccion de operaciones entre los que pasan; si ninguno pasa -> se descarta la banda, la senal candidata sigue siendo TSMOM k=14 long_flat sin banda (firmado 2026-07-16)"
+  },
+  "celdas": 4,
+  "resultados": {
+    "BTCUSDT": {
+      "buy_and_hold": {
+        "n_dias": 365,
+        "sharpe": -1.1906595134507838,
+        "max_drawdown": 0.5297176591351067,
+        "media": -0.0013980178206594838
+      },
+      "celdas": {
+        "0.0": {
+          "n_dias": 365,
+          "n_dias_en_posicion": 167,
+          "sharpe": 0.1979924877671772,
+          "max_drawdown": 0.17808612887913677,
+          "media": 0.00013089549084181816,
+          "mediana_en_posicion": 0.00098273041463659,
+          "cambios_de_posicion": 46
+        },
+        "0.02": {
+          "n_dias": 365,
+          "n_dias_en_posicion": 165,
+          "sharpe": -1.2248404358381586,
+          "max_drawdown": 0.3543651305379255,
+          "media": -0.0007902845212824441,
+          "mediana_en_posicion": -0.0005633608354392861,
+          "cambios_de_posicion": 24,
+          "pasa_vs_control": false
+        },
+        "0.05": {
+          "n_dias": 365,
+          "n_dias_en_posicion": 175,
+          "sharpe": -1.5263462888656265,
+          "max_drawdown": 0.4264993877388026,
+          "media": -0.001050514057981144,
+          "mediana_en_posicion": -0.0011905001624232803,
+          "cambios_de_posicion": 18,
+          "pasa_vs_control": false
+        },
+        "0.08": {
+          "n_dias": 365,
+          "n_dias_en_posicion": 150,
+          "sharpe": -1.335709891079237,
+          "max_drawdown": 0.3977655310817586,
+          "media": -0.0008693806947394132,
+          "mediana_en_posicion": -0.0009407085812870308,
+          "cambios_de_posicion": 10,
+          "pasa_vs_control": false
+        }
+      }
+    }
+  }
+}
