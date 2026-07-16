@@ -296,3 +296,26 @@ congelar la búsqueda de señal conservando la infraestructura. Hallazgo de
 datos (Task 6): el cache de ticks del replay de backtest es de SPOT mientras
 el bot opera FUTUROS — ablaciones futuras deberían descargar aggTrades de
 futuros desde data.binance.vision antes de confiar en diferencias finas.
+
+**Ciclo momentum multi-día (2026-07, spec:
+`docs/superpowers/specs/2026-07-15-ciclo-momentum-multidia-design.md`):**
+estudios M1 (TSMOM) y M2 (P/MA, réplica de Detzel et al.) sobre velas
+diarias spot 2017-2026 (BTC+ETH), verificación sellada 2024→presente;
+M3 (vol targeting) y M4 (funding drag) condicionales. Veredicto:
+`backtest_runs/estudios/veredicto-momentum-2026-07.md`.
+Resultado: **M1 PASA** (BTC, lookback 14 días long_short/long_flat y 28
+días long_flat cumplen Sharpe/drawdown/media/mediana mejor que
+buy-and-hold en calibración 2017-2023 Y verificación 2024-2026 por
+separado) y **M2 PASA** (BTC, MA de 20/50/100 días, mismo patrón; sin
+discrepancia con M1 — evidencia convergente, no frágil). Primera vez en
+el proyecto que un estudio de tasa base pre-registrado sobrevive intacto a
+su ventana de verificación sellada. Condicionales sobre la celda ganadora
+(M1, 14 días, long_flat): **M3 adopta** overlay de vol targeting con
+σ_target 0.30-0.40 anualizado (reduce drawdown de 65%→38-44% en
+calibración y de 27%→17-18% en verificación sin sacrificar más de la mitad
+de la media); **M4 favorece SPOT** sobre perp para la pata long (el drag
+de funding le come 0.15-0.26 de Sharpe en ambas ventanas). Por criterio de
+salida pre-registrado, corresponde el siguiente ciclo: brainstorming de
+diseño de señal (histéresis, gates, convivencia con el bot de scalping,
+harness de ablación) sobre la hipótesis momentum 14-28 días — decisión de
+Guille, no tomada en este veredicto.

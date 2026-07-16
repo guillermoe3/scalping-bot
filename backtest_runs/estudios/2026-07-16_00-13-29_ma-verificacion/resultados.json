@@ -1,0 +1,456 @@
+{
+  "preregistro": {
+    "rol": "M2 P/MA (replica de Detzel et al. 2021) — estudio de adopcion (spec 2026-07-15)",
+    "datos": "klines 1d SPOT Binance, 2017-08 -> mes corriente exclusivo, BTC+ETH",
+    "senal": "P(t)/MA_n(close), n in {10,20,50,100}; long si ratio > 1, flat si <= 1 (sin banda muerta); la posicion decidida al cierre de t se aplica al retorno de t+1",
+    "split": "calibracion 2017-08 -> 2023-12; verificacion 2024-01 -> presente (sellada); corte_ms=1704067200000",
+    "burn_in": "en verificacion, los 100 dias previos al corte solo alimentan la senal",
+    "descriptivo": "contraste de quintiles del ratio (quintil alto vs bajo, forward 1/7/14d) DENTRO de cada ventana — SOLO descriptivo",
+    "umbral_adopcion": "por celda de estrategia de BTC, en calibracion Y verificacion por separado (verificacion entera, sin subventanas): Sharpe estrategia > Sharpe buy-and-hold, Y max drawdown estrategia < buy-and-hold, Y media de r_strat > 0, Y mediana de r_strat sobre los dias con posicion > 0. 'Casi' = NO PASA. Solo BTC adopta/veta; ETH robustez.",
+    "regla_fragilidad": "si M1 pasa y M2 falla (o viceversa) en celdas economicamente equivalentes, se reporta como fragilidad de especificacion — no se elige la mejor",
+    "criterio_abandono": "si ninguna celda de M1 ni M2 pasa en BTC -> se congela la busqueda de senal (firmado 2026-07-15)"
+  },
+  "celdas": 56,
+  "resultados": {
+    "BTCUSDT": {
+      "buy_and_hold": {
+        "n_dias": 912,
+        "sharpe": 0.511381387059824,
+        "max_drawdown": 0.529717659135106,
+        "media": 0.0006728780159820752
+      },
+      "estrategia": {
+        "10": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 471,
+          "sharpe": 0.7016161289682491,
+          "max_drawdown": 0.3206431187830524,
+          "media": 0.0006151560425404726,
+          "mediana_en_posicion": -4.19031937628489e-05
+        },
+        "20": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 462,
+          "sharpe": 0.6900673060366745,
+          "max_drawdown": 0.3204938660450726,
+          "media": 0.0006115396919002462,
+          "mediana_en_posicion": 0.00046616281534017645
+        },
+        "50": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 492,
+          "sharpe": 0.9332056023599112,
+          "max_drawdown": 0.2579407214469486,
+          "media": 0.000842321418618165,
+          "mediana_en_posicion": 0.0007083465402678568
+        },
+        "100": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 520,
+          "sharpe": 0.7713179900295758,
+          "max_drawdown": 0.35039639727336225,
+          "media": 0.0007080266632413366,
+          "mediana_en_posicion": 0.00046616281534017645
+        }
+      },
+      "quintiles": {
+        "10": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.002972359330688381,
+              "mediana": 0.002366092433077004,
+              "hit_rate": 0.5384615384615384
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.00039073182023889065,
+              "mediana": -0.0009369070047518058,
+              "hit_rate": 0.4835164835164835
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": 0.0010751462940523614,
+              "mediana": 0.0025789851156063173,
+              "hit_rate": 0.5193370165745856
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.005835030502933787,
+              "mediana": 0.0035769034236075624,
+              "hit_rate": 0.5303867403314917
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": 0.0006024525255127177,
+              "mediana": 0.005716156541464179,
+              "hit_rate": 0.5251396648044693
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.01510041726444447,
+              "mediana": 0.008426071717961541,
+              "hit_rate": 0.5418994413407822
+            }
+          }
+        },
+        "20": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.0028932635048355354,
+              "mediana": 0.003858579228620082,
+              "hit_rate": 0.532967032967033
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.001642764692942497,
+              "mediana": 0.0010582322793365041,
+              "hit_rate": 0.521978021978022
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": 0.0036159030429628526,
+              "mediana": 0.009483846563848567,
+              "hit_rate": 0.569060773480663
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.009569424466513519,
+              "mediana": 0.005133039345901427,
+              "hit_rate": 0.56353591160221
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": 0.0033037731253568177,
+              "mediana": 0.005716156541464179,
+              "hit_rate": 0.5363128491620112
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.022642228759677405,
+              "mediana": 0.01503957338592491,
+              "hit_rate": 0.5977653631284916
+            }
+          }
+        },
+        "50": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.0013520189389998301,
+              "mediana": -0.000846858552936497,
+              "hit_rate": 0.4835164835164835
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.002744657626315663,
+              "mediana": 0.0018334182345560038,
+              "hit_rate": 0.5439560439560439
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": 0.005726535511568148,
+              "mediana": 0.00432486039950883,
+              "hit_rate": 0.5414364640883977
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.02134568038037345,
+              "mediana": 0.013609324915169871,
+              "hit_rate": 0.5911602209944752
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": 0.01237657989180454,
+              "mediana": 0.0070799657013124115,
+              "hit_rate": 0.5307262569832403
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.044918383806607766,
+              "mediana": 0.031995243564237906,
+              "hit_rate": 0.6480446927374302
+            }
+          }
+        },
+        "100": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.001728645141639607,
+              "mediana": -0.0004424605275293074,
+              "hit_rate": 0.489010989010989
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.0017302649154273175,
+              "mediana": 0.00028746577863120263,
+              "hit_rate": 0.510989010989011
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": 0.00826248359747959,
+              "mediana": 0.005519768879454848,
+              "hit_rate": 0.5580110497237569
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.01467753416065457,
+              "mediana": 0.003379459779936,
+              "hit_rate": 0.5303867403314917
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": 0.02146588602242339,
+              "mediana": 0.016923982820391835,
+              "hit_rate": 0.5865921787709497
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.027820919297853255,
+              "mediana": 0.00425813319707039,
+              "hit_rate": 0.5418994413407822
+            }
+          }
+        }
+      }
+    },
+    "ETHUSDT": {
+      "buy_and_hold": {
+        "n_dias": 912,
+        "sharpe": 0.1269576271350077,
+        "max_drawdown": 0.6755345017766718,
+        "media": 0.00024064224939658328
+      },
+      "estrategia": {
+        "10": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 432,
+          "sharpe": 0.24641766463268605,
+          "max_drawdown": 0.5192093534136037,
+          "media": 0.00029711970387795157,
+          "mediana_en_posicion": -0.0011591271857754326
+        },
+        "20": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 395,
+          "sharpe": 0.4067628460077406,
+          "max_drawdown": 0.45602140494376386,
+          "media": 0.0005217075876445145,
+          "mediana_en_posicion": 9.13242009130677e-05
+        },
+        "50": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 417,
+          "sharpe": 0.9281155237930379,
+          "max_drawdown": 0.3665572326678477,
+          "media": 0.0011233770597138234,
+          "mediana_en_posicion": 0.0010935594501286783
+        },
+        "100": {
+          "n_dias": 912,
+          "n_dias_en_posicion": 443,
+          "sharpe": 0.5446622164059172,
+          "max_drawdown": 0.4527310906014247,
+          "media": 0.0006543329621979368,
+          "mediana_en_posicion": 0.0009985111089907406
+        }
+      },
+      "quintiles": {
+        "10": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.0016056072000122613,
+              "mediana": 0.0005510824814637999,
+              "hit_rate": 0.5054945054945055
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.002477076243811985,
+              "mediana": 0.0004486774463660718,
+              "hit_rate": 0.5054945054945055
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": 0.005420749746773747,
+              "mediana": 0.007588168021512697,
+              "hit_rate": 0.56353591160221
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.01103431352906588,
+              "mediana": 0.005906244127314113,
+              "hit_rate": 0.5193370165745856
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": -0.0032934554276491876,
+              "mediana": 0.00015913474597428252,
+              "hit_rate": 0.5027932960893855
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.020173715071495197,
+              "mediana": -0.007836211522727897,
+              "hit_rate": 0.48044692737430167
+            }
+          }
+        },
+        "20": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.0015107865494635635,
+              "mediana": 0.0015703701261335313,
+              "hit_rate": 0.5164835164835165
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.002373539946250697,
+              "mediana": 0.0007244808454837934,
+              "hit_rate": 0.5054945054945055
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": -0.002387457295755841,
+              "mediana": 0.008183519784094252,
+              "hit_rate": 0.5359116022099447
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.02262515630325454,
+              "mediana": 0.014537154317078358,
+              "hit_rate": 0.5911602209944752
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": -0.01507605665145881,
+              "mediana": -0.016452066041737098,
+              "hit_rate": 0.441340782122905
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.04637497261182972,
+              "mediana": 0.021405368715354662,
+              "hit_rate": 0.553072625698324
+            }
+          }
+        },
+        "50": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.0008267151108937948,
+              "mediana": 1.7461263906055887e-05,
+              "hit_rate": 0.5
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.004245891930460867,
+              "mediana": 0.0017640063388499549,
+              "hit_rate": 0.532967032967033
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": -0.006995096509770468,
+              "mediana": -0.0029761779121160953,
+              "hit_rate": 0.47513812154696133
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.025228853965178794,
+              "mediana": 0.017489747619339895,
+              "hit_rate": 0.574585635359116
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": -0.009458398699121894,
+              "mediana": -0.02167553337556167,
+              "hit_rate": 0.43575418994413406
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.04098397264721378,
+              "mediana": 0.017099377558989895,
+              "hit_rate": 0.5698324022346368
+            }
+          }
+        },
+        "100": {
+          "1d": {
+            "q_bajo": {
+              "n": 182,
+              "media": 0.0007180302006970245,
+              "mediana": 0.0009885232153743933,
+              "hit_rate": 0.5054945054945055
+            },
+            "q_alto": {
+              "n": 182,
+              "media": 0.0015501362839541342,
+              "mediana": 0.0002040158333281661,
+              "hit_rate": 0.5054945054945055
+            }
+          },
+          "7d": {
+            "q_bajo": {
+              "n": 181,
+              "media": -0.00017531088792336412,
+              "mediana": 0.007588168021512697,
+              "hit_rate": 0.5524861878453039
+            },
+            "q_alto": {
+              "n": 181,
+              "media": 0.015330107330853254,
+              "mediana": 0.002130375118753972,
+              "hit_rate": 0.5027624309392266
+            }
+          },
+          "14d": {
+            "q_bajo": {
+              "n": 179,
+              "media": 0.007424708771141134,
+              "mediana": 0.004175206862521767,
+              "hit_rate": 0.5139664804469274
+            },
+            "q_alto": {
+              "n": 179,
+              "media": 0.02790433121352058,
+              "mediana": 0.003308115516243277,
+              "hit_rate": 0.5307262569832403
+            }
+          }
+        }
+      }
+    }
+  }
+}
