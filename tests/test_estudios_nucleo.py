@@ -3,7 +3,9 @@ import math
 import pytest
 
 from estudios.nucleo import (
+    CORTE_HISTERESIS_MS,
     CORTE_VERIFICACION_MS,
+    cambios_de_posicion,
     max_drawdown,
     metricas_buy_and_hold,
     metricas_estrategia,
@@ -139,3 +141,16 @@ def test_metricas_estrategia_eval_desde_recorta_el_burn_in():
     posiciones = [1.0, 1.0, 1.0, 1.0]
     m = metricas_estrategia(retornos, posiciones, eval_desde=2)
     assert m["n_dias"] == 2  # solo los dias 2 y 3
+
+
+def test_cambios_de_posicion_cuenta_transiciones():
+    assert cambios_de_posicion([0.0, 0.0, 1.0, 1.0, 0.0]) == 2
+    assert cambios_de_posicion([1.0, 1.0, 1.0]) == 0
+    assert cambios_de_posicion([1.0]) == 0
+    assert cambios_de_posicion([]) == 0
+
+
+def test_corte_histeresis_ms_es_2025_07_01():
+    from datetime import datetime, timezone
+    momento = datetime.fromtimestamp(CORTE_HISTERESIS_MS / 1000, tz=timezone.utc)
+    assert momento == datetime(2025, 7, 1, tzinfo=timezone.utc)
