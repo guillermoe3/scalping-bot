@@ -319,3 +319,18 @@ salida pre-registrado, corresponde el siguiente ciclo: brainstorming de
 diseño de señal (histéresis, gates, convivencia con el bot de scalping,
 harness de ablación) sobre la hipótesis momentum 14-28 días — decisión de
 Guille, no tomada en este veredicto.
+
+**Ciclo diseño de señal — banda muerta (2026-07, spec:
+`docs/superpowers/specs/2026-07-16-ciclo-histeresis-momentum-design.md`):**
+banda muerta simétrica sobre TSMOM k=14 long_flat BTC, grilla X∈{0,2,5,8}%,
+verificación sellada NUEVA 2025-07→presente (no reusa la ya gastada en
+M1/M2). Veredicto:
+`backtest_runs/estudios/veredicto-histeresis-2026-07.md`.
+Resultado: **ningún X pasa** (0.02, 0.05 y 0.08 fallan `pasa_vs_control`
+tanto en calibración como en verificación — en calibración los tres
+reducen cambios de posición pero ninguno cumple Sharpe≥control y
+drawdown≤control a la vez; en verificación el control sin banda tiene
+Sharpe positivo y los tres X con banda tienen Sharpe negativo y peor
+drawdown). Por criterio de salida pre-registrado: se descarta la banda
+muerta; la señal candidata sigue siendo TSMOM k=14 long_flat sin banda,
+sin re-testear con otra grilla sin una razón nueva.

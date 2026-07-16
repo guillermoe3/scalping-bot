@@ -1,0 +1,70 @@
+# histeresis-calibracion
+
+## Pre-registro
+
+- rol: Ciclo diseno de senal — banda muerta sobre TSMOM k=14 (spec 2026-07-16)
+- datos: klines 1d SPOT Binance, 2017-08 -> mes corriente exclusivo, BTC unicamente
+- senal: banda muerta simetrica sobre ret[t-14,t]: entra largo si ret > x, pasa a flat si ret <= -x, si cae en (-x, x] mantiene la posicion del dia anterior (primer dia evaluable sin previa: flat)
+- grilla_x: 0.0, 0.02, 0.05, 0.08 (fraccion); x=0.0 es control de sanidad, degenera en TSMOM k=14 long_flat sin banda
+- split: calibracion 2017-08 -> 2025-06; verificacion 2025-07 -> presente (sellada, ventana NUEVA); corte_ms=1751328000000
+- burn_in: en verificacion, los 14 dias previos al corte solo alimentan la senal
+- umbral_adopcion: para cada x>0, comparado contra el control x=0.0 de la MISMA ventana, en calibracion Y verificacion por separado: cambios_de_posicion(x) < cambios_de_posicion(control), Y sharpe(x) >= sharpe(control), Y max_drawdown(x) <= max_drawdown(control). 'Casi' = NO PASA.
+- criterio_salida: si algun x>0 pasa en ambas ventanas -> se adopta el de mayor reduccion de operaciones entre los que pasan; si ninguno pasa -> se descarta la banda, la senal candidata sigue siendo TSMOM k=14 long_flat sin banda (firmado 2026-07-16)
+
+Celdas miradas: 4
+
+## Resultados
+
+```json
+{
+  "BTCUSDT": {
+    "buy_and_hold": {
+      "n_dias": 2874,
+      "sharpe": 0.9388333490322897,
+      "max_drawdown": 0.8318705353076483,
+      "media": 0.0017991068696705298
+    },
+    "celdas": {
+      "0.0": {
+        "n_dias": 2874,
+        "n_dias_en_posicion": 1562,
+        "sharpe": 1.2826396716780175,
+        "max_drawdown": 0.6553363166297628,
+        "media": 0.0016826876112135299,
+        "mediana_en_posicion": 0.0009924023143448313,
+        "cambios_de_posicion": 333
+      },
+      "0.02": {
+        "n_dias": 2874,
+        "n_dias_en_posicion": 1581,
+        "sharpe": 1.1246564596381148,
+        "max_drawdown": 0.6884667372903926,
+        "media": 0.0014825637709242451,
+        "mediana_en_posicion": 0.0009158253401495564,
+        "cambios_de_posicion": 199,
+        "pasa_vs_control": false
+      },
+      "0.05": {
+        "n_dias": 2874,
+        "n_dias_en_posicion": 1597,
+        "sharpe": 1.074953800200886,
+        "max_drawdown": 0.6471022724040449,
+        "media": 0.0014168075818143866,
+        "mediana_en_posicion": 0.0007079101319968917,
+        "cambios_de_posicion": 120,
+        "pasa_vs_control": false
+      },
+      "0.08": {
+        "n_dias": 2874,
+        "n_dias_en_posicion": 1713,
+        "sharpe": 0.7720854484418148,
+        "max_drawdown": 0.6953890470700017,
+        "media": 0.0010626297707132038,
+        "mediana_en_posicion": 0.0003471524364619949,
+        "cambios_de_posicion": 94,
+        "pasa_vs_control": false
+      }
+    }
+  }
+}
+```

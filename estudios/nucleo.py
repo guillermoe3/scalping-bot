@@ -197,3 +197,15 @@ def metricas_buy_and_hold(retornos: list[float], eval_desde: int = 0) -> dict:
         "max_drawdown": max_drawdown(bh),
         "media": statistics.fmean(bh) if bh else None,
     }
+
+
+# --- Hysteresis-band study (signal-design cycle, spec 2026-07-16) ---
+
+CORTE_HISTERESIS_MS = 1751328000000  # 2025-07-01T00:00:00Z
+
+
+def cambios_de_posicion(posiciones: list[float]) -> int:
+    """Count of days where the position differs from the previous day's."""
+    return sum(
+        1 for t in range(1, len(posiciones)) if posiciones[t] != posiciones[t - 1]
+    )
