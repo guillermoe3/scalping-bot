@@ -3,9 +3,17 @@ import asyncio
 import pytest
 
 import clock
+import daily_safety
+import safety
 from execution import ExecutionEngine
 from main import wire_strategy
 from state import Candle, MarketState, Side
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(safety, "STATE_FILE_PATH", str(tmp_path / "safety_state.json"))
+    monkeypatch.setattr(daily_safety, "DAILY_STATE_FILE_PATH", str(tmp_path / "daily_safety_state.json"))
 
 
 class _FakeFeed:
