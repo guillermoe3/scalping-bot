@@ -108,7 +108,7 @@ def test_on_trade_handler_checks_pending_entries():
 
 
 from daily_execution import DailyExecutionEngine
-from daily_state import DailyClose, DailyState, append_close
+from daily_state import DailyClose, DailyState, append_close, current_exposure_pct
 from main import wire_daily_strategy
 
 
@@ -174,3 +174,35 @@ def test_on_candle_1d_calls_on_breaker_tripped_hook():
 
     assert len(captured) == 1
     assert state.breaker_active is True
+
+
+def test_on_candle_1d_calls_on_daily_close_hook_every_time():
+    state = _rising_history(40)
+    captured = []
+    feed = _FakeDailyFeed()
+    engine = DailyExecutionEngine(state)
+    wire_daily_strategy(state, feed, engine, on_daily_close=captured.append)
+
+    asyncio.run(feed.candle_1d_handlers[0](DailyClose(timestamp=40 * 86_400_000, close=140.0)))
+
+    assert len(captured) == 1
+    event = captured[0]
+    assert event["close"] == pytest.approx(140.0)
+    assert event["breaker_active"] is False
+    assert event["current_exposure"] == pytest.approx(current_exposure_pct(state, 140.0))
+
+
+def test_on_candle_1d_daily_close_hook_fires_even_when_breaker_active():
+    state = _rising_history(40, usdt_balance=50.0)
+    state.btc_balance = 1.0
+    state.breaker_active = True
+    captured = []
+    feed = _FakeDailyFeed()
+    engine = DailyExecutionEngine(state)
+    wire_daily_strategy(state, feed, engine, on_daily_close=captured.append)
+
+    asyncio.run(feed.candle_1d_handlers[0](DailyClose(timestamp=40 * 86_400_000, close=140.0)))
+
+    assert len(captured) == 1
+    assert captured[0]["breaker_active"] is True
+    assert captured[0]["target_exposure"] == 0.0

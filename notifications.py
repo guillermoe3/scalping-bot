@@ -96,6 +96,17 @@ class TelegramNotifier:
         )
         self._enqueue(text)
 
+    def notify_daily_heartbeat(self, event: dict) -> None:
+        breaker_text = "activo" if event["breaker_active"] else "no activo"
+        text = (
+            "📊 Cierre diario TSMOM\n"
+            f"Precio: ${event['close']:,.2f}\n"
+            f"Exposición objetivo: {event['target_exposure']*100:.1f}%  |  "
+            f"actual: {event['current_exposure']*100:.1f}%\n"
+            f"Circuit breaker: {breaker_text}"
+        )
+        self._enqueue(text)
+
     def _enqueue(self, text: str) -> None:
         if not self._enabled:
             return

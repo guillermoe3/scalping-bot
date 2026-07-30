@@ -349,6 +349,46 @@ def test_notify_circuit_breaker_formats_drawdown_and_equity():
     )
 
 
+def test_notify_daily_heartbeat_formats_price_exposures_and_breaker_state():
+    notifier = TelegramNotifier("token123", "chat123")
+
+    notifier.notify_daily_heartbeat({
+        "close": 67234.50, "target_exposure": 0.452,
+        "current_exposure": 0.448, "breaker_active": False,
+    })
+
+    text = notifier._queue.get_nowait()
+    assert text == (
+        "📊 Cierre diario TSMOM\n"
+        "Precio: $67,234.50\n"
+        "Exposición objetivo: 45.2%  |  actual: 44.8%\n"
+        "Circuit breaker: no activo"
+    )
+
+
+def test_notify_daily_heartbeat_formats_breaker_active():
+    notifier = TelegramNotifier("token123", "chat123")
+
+    notifier.notify_daily_heartbeat({
+        "close": 50000.0, "target_exposure": 0.0,
+        "current_exposure": 0.0, "breaker_active": True,
+    })
+
+    text = notifier._queue.get_nowait()
+    assert "Circuit breaker: activo" in text
+
+
+def test_notify_daily_heartbeat_disabled_when_no_credentials():
+    notifier = TelegramNotifier(None, None)
+
+    notifier.notify_daily_heartbeat({
+        "close": 50000.0, "target_exposure": 0.0,
+        "current_exposure": 0.0, "breaker_active": False,
+    })
+
+    assert notifier._queue.empty()
+
+
 def test_notify_rebalance_disabled_when_no_credentials():
     notifier = TelegramNotifier(None, None)
 

@@ -14,7 +14,7 @@ from data_feed import DataFeed
 from daily_execution import DailyExecutionEngine
 from daily_feed import DailyDataFeed, backfill
 from daily_signal import objetivo_exposicion
-from daily_state import DailyState, DailyClose, close_values
+from daily_state import DailyState, DailyClose, close_values, current_exposure_pct
 from execution import ExecutionEngine, PAPER_MODE
 from indicators import detect_swing_points, update_indicators
 from momentum import update_volume_velocity
@@ -102,11 +102,17 @@ def wire_daily_strategy(
     feed,
     engine: DailyExecutionEngine,
     on_breaker_tripped: Optional[Callable[[dict], None]] = None,
+    on_daily_close: Optional[Callable[[dict], None]] = None,
 ) -> None:
     """Registers the daily TSMOM strategy's single event handler: one
     signal evaluation + rebalance per closed UTC day. feed can be
     DailyDataFeed (live) — it only needs to expose on_candle_1d
-    (duck typing, same convention as wire_strategy)."""
+    (duck typing, same convention as wire_strategy).
+
+    on_daily_close fires every day regardless of whether a rebalance
+    happened — the rebalance band (see daily_execution.py) means most
+    days are silent otherwise, and a bot that never speaks is
+    indistinguishable from a bot that's stuck or dead."""
 
     async def on_candle_1d(candle: DailyClose) -> None:
         daily_safety.update_circuit_breaker(state, candle.close, on_breaker_tripped=on_breaker_tripped)
@@ -119,6 +125,14 @@ def wire_daily_strategy(
             "1d | close=%.2f target_exposure=%.1f%% breaker=%s",
             candle.close, target * 100, state.breaker_active,
         )
+
+        if on_daily_close is not None:
+            on_daily_close({
+                "close": candle.close,
+                "target_exposure": target,
+                "current_exposure": current_exposure_pct(state, candle.close),
+                "breaker_active": state.breaker_active,
+            })
 
     feed.on_candle_1d(on_candle_1d)
 
@@ -137,7 +151,11 @@ async def run() -> None:
 
     feed = DailyDataFeed(daily_state)
     on_breaker_tripped = lambda e: notifier.notify_circuit_breaker(e["drawdown_pct"], e["equity_usdt"])
-    wire_daily_strategy(daily_state, feed, engine, on_breaker_tripped=on_breaker_tripped)
+    wire_daily_strategy(
+        daily_state, feed, engine,
+        on_breaker_tripped=on_breaker_tripped,
+        on_daily_close=notifier.notify_daily_heartbeat,
+    )
 
     mode = "PAPER" if os.getenv("PAPER_MODE", "true").lower() == "true" else "LIVE"
     logger.info("BTC TSMOM Daily Bot starting — mode=%s", mode)
