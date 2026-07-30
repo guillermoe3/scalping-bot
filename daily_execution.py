@@ -59,7 +59,7 @@ class DailyExecutionEngine:
 
         if not PAPER_MODE and self._exchange is not None:
             try:
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: self._exchange.create_market_order("BTC/USDT", side, btc_amount),
                 )

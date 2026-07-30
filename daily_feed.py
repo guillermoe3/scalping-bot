@@ -83,8 +83,10 @@ def backfill(state: DailyState, exchange: Optional[object] = None, limit: int = 
     endpoint — no API keys needed) and seeds state.closes, so the k=14
     lookback and 30-day vol window are populated immediately instead of
     waiting weeks. Drops Binance's still-forming current-day candle."""
+    state.closes.clear()
     ex = exchange if exchange is not None else _public_spot_exchange()
     rows = ex.fetch_ohlcv("BTC/USDT", timeframe="1d", limit=limit)
+    rows = sorted(rows, key=lambda r: r[0])
     now_ms = clock.now() * 1000.0
     for ts, _o, _h, _l, close, _v in rows:
         if ts + _ONE_DAY_MS > now_ms:

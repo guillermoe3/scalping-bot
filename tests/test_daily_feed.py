@@ -2,7 +2,7 @@ import asyncio
 
 import clock
 from daily_feed import DailyDataFeed, backfill
-from daily_state import DailyState, close_values
+from daily_state import DailyState, append_close, close_values
 
 
 def test_dispatch_ignores_unclosed_candle():
@@ -88,3 +88,19 @@ def test_backfill_appends_in_chronological_order(monkeypatch):
     backfill(state, _FakeExchange(rows))
 
     assert close_values(state) == [10.0, 20.0]
+
+
+def test_backfill_clears_stale_closes_before_repopulating(monkeypatch):
+    fixed_now = 2_000_000_000.0
+    monkeypatch.setattr(clock, "now", lambda: fixed_now)
+    now_ms = fixed_now * 1000.0
+    rows = [
+        [now_ms - 2 * 86_400_000, 0, 0, 0, 10.0, 0],
+        [now_ms - 1 * 86_400_000, 0, 0, 0, 20.0, 0],
+    ]
+    state = DailyState()
+    append_close(state, timestamp=1, close=999999.0)  # stale entry from a prior run
+
+    backfill(state, _FakeExchange(rows))
+
+    assert close_values(state) == [10.0, 20.0]  # stale entry is gone, not prepended
