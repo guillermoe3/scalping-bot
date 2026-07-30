@@ -61,17 +61,28 @@ def load_into_state(state: DailyState) -> bool:
         logger.warning("Could not parse %s — starting with fresh state", DAILY_STATE_FILE_PATH)
         return False
 
+    if not isinstance(payload, dict):
+        logger.warning("Could not parse %s — starting with fresh state", DAILY_STATE_FILE_PATH)
+        return False
+
     try:
-        for row in payload.get("closes", []):
-            append_close(state, row["timestamp"], row["close"])
-        state.btc_balance = payload.get("btc_balance", 0.0)
-        state.usdt_balance = payload.get("usdt_balance", 0.0)
-        state.equity_peak_usdt = payload.get("equity_peak_usdt", 0.0)
-        state.breaker_active = payload.get("breaker_active", False)
-        state.last_rebalance_date = payload.get("last_rebalance_date")
+        rows = [(row["timestamp"], row["close"]) for row in payload.get("closes", [])]
+        btc_balance = payload.get("btc_balance", 0.0)
+        usdt_balance = payload.get("usdt_balance", 0.0)
+        equity_peak_usdt = payload.get("equity_peak_usdt", 0.0)
+        breaker_active = payload.get("breaker_active", False)
+        last_rebalance_date = payload.get("last_rebalance_date")
     except (TypeError, KeyError, ValueError):
         logger.warning("Could not parse %s — starting with fresh state", DAILY_STATE_FILE_PATH)
         return False
+
+    for timestamp, close in rows:
+        append_close(state, timestamp, close)
+    state.btc_balance = btc_balance
+    state.usdt_balance = usdt_balance
+    state.equity_peak_usdt = equity_peak_usdt
+    state.breaker_active = breaker_active
+    state.last_rebalance_date = last_rebalance_date
     return True
 
 

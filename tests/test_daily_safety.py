@@ -94,6 +94,36 @@ def test_load_into_state_returns_false_on_corrupt_json(_isolate_state_file):
     assert found is False
 
 
+def test_load_into_state_returns_false_when_payload_is_not_a_dict(_isolate_state_file):
+    with open(daily_safety.DAILY_STATE_FILE_PATH, "w") as f:
+        json.dump([1, 2, 3], f)
+    state = DailyState()
+
+    found = daily_safety.load_into_state(state)  # must not raise
+
+    assert found is False
+
+
+def test_load_into_state_leaves_state_untouched_when_a_closes_row_is_malformed(_isolate_state_file):
+    payload = {
+        "closes": [{"timestamp": 1000, "close": 50000.0}, {"timestamp": 2000}],  # second row missing "close"
+        "btc_balance": 0.5,
+        "usdt_balance": 1000.0,
+        "equity_peak_usdt": 1200.0,
+        "breaker_active": True,
+        "last_rebalance_date": "2026-07-30",
+    }
+    with open(daily_safety.DAILY_STATE_FILE_PATH, "w") as f:
+        json.dump(payload, f)
+    state = DailyState()
+
+    found = daily_safety.load_into_state(state)
+
+    assert found is False
+    assert len(state.closes) == 0        # no partial append from the loop
+    assert state.btc_balance == 0.0      # untouched, still the DailyState default
+
+
 # --- exchange balances / reconciliation ---
 
 class _FakeBalanceExchange:
