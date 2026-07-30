@@ -70,3 +70,14 @@ SPREAD_FILTER_ATR_PCT = 0.01  # block entries when spread > 1% of 15m ATR (~5.5x
 
 # Backtesting
 BACKTEST_SYNTHETIC_SPREAD_PCT = 0.00001  # 0.001% of price per side (~10x the typical real BTCUSDT futures spread); must stay well below SPREAD_FILTER_ATR_PCT * typical 15m ATR% or the spread gate blocks every backtest entry
+
+# --- Daily TSMOM strategy (live paper-trading integration, spec 2026-07-30) ---
+TSMOM_LOOKBACK_DAYS = 14
+TSMOM_VARIANTE = "long_flat"       # the only variant implemented — documents scope, not branched on
+VOL_TARGET_ANNUALIZED = 0.40       # M3: adopted value with the better Sharpe of the two that passed
+REBALANCE_BAND_PCT = 0.10          # exposure must move this many points before a spot trade fires
+DRAWDOWN_CIRCUIT_BREAKER_PCT = 0.50  # drawdown from peak equity that forces flat + blocks entries
+DAILY_STATE_FILE_PATH = "daily_safety_state.json"
+DAILY_CLOSES_BUFFER = 400          # days of history kept in memory (lookback 14d + vol window 30d + margin)
+SPOT_TAKER_FEE_RATE = 0.0010       # Binance Spot, no BNB discount — market orders only (see daily_execution.py)
+DAILY_WS_STREAM = "btcusdt@kline_1d"  # same WS_STREAM_URL base as the scalping feed (Binance spot)
