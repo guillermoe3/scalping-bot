@@ -4,6 +4,7 @@ __pycache__/
 venv/
 .env
 safety_state.json
+daily_safety_state.json
 .claude/settings.local.json
 .worktrees/
 backtest_cache/
