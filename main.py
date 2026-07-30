@@ -4,10 +4,17 @@ import asyncio
 import logging
 import os
 import sys
+from typing import Callable, Optional
 
 from dotenv import load_dotenv
 
+import clock
+import daily_safety
 from data_feed import DataFeed
+from daily_execution import DailyExecutionEngine
+from daily_feed import DailyDataFeed, backfill
+from daily_signal import objetivo_exposicion
+from daily_state import DailyState, DailyClose, close_values
 from execution import ExecutionEngine, PAPER_MODE
 from indicators import detect_swing_points, update_indicators
 from momentum import update_volume_velocity
@@ -90,26 +97,50 @@ def wire_strategy(state: MarketState, feed, engine: ExecutionEngine) -> None:
     feed.on_candle_15m(on_candle_15m)
 
 
+def wire_daily_strategy(
+    state: DailyState,
+    feed,
+    engine: DailyExecutionEngine,
+    on_breaker_tripped: Optional[Callable[[dict], None]] = None,
+) -> None:
+    """Registers the daily TSMOM strategy's single event handler: one
+    signal evaluation + rebalance per closed UTC day. feed can be
+    DailyDataFeed (live) — it only needs to expose on_candle_1d
+    (duck typing, same convention as wire_strategy)."""
+
+    async def on_candle_1d(candle: DailyClose) -> None:
+        daily_safety.update_circuit_breaker(state, candle.close, on_breaker_tripped=on_breaker_tripped)
+        target = 0.0 if state.breaker_active else objetivo_exposicion(close_values(state))
+        await engine.rebalance(target, candle.close)
+        state.last_rebalance_date = clock.today_utc()
+        daily_safety.save_state(state)
+
+        logger.info(
+            "1d | close=%.2f target_exposure=%.1f%% breaker=%s",
+            candle.close, target * 100, state.breaker_active,
+        )
+
+    feed.on_candle_1d(on_candle_1d)
+
+
 async def run() -> None:
-    state = MarketState()
-    safety.load_into_state(state)
+    daily_state = DailyState()
+    found_persisted = daily_safety.load_into_state(daily_state)
 
     notifier = TelegramNotifier(os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID"))
-    on_trade_closed, on_day_rolled_over = make_notification_handlers(notifier, state)
 
-    feed = DataFeed(state)
-    engine = ExecutionEngine(
-        state, on_trade_closed=on_trade_closed, on_trade_opened=notifier.notify_trade_opened,
-    )
-    if not PAPER_MODE:
-        safety.reconcile_with_exchange(state, engine.exchange)
-        await engine.cancel_open_orders()
-    safety.maybe_reset_daily(state, engine.exchange, on_day_rolled_over=on_day_rolled_over)
+    engine = DailyExecutionEngine(daily_state, on_rebalanced=notifier.notify_rebalance)
+    backfill(daily_state, engine.exchange)
 
-    wire_strategy(state, feed, engine)
+    last_close = close_values(daily_state)[-1] if daily_state.closes else 0.0
+    daily_safety.ensure_initialized(daily_state, engine.exchange, found_persisted, last_close)
+
+    feed = DailyDataFeed(daily_state)
+    on_breaker_tripped = lambda e: notifier.notify_circuit_breaker(e["drawdown_pct"], e["equity_usdt"])
+    wire_daily_strategy(daily_state, feed, engine, on_breaker_tripped=on_breaker_tripped)
 
     mode = "PAPER" if os.getenv("PAPER_MODE", "true").lower() == "true" else "LIVE"
-    logger.info("BTC Scalping Bot starting — mode=%s", mode)
+    logger.info("BTC TSMOM Daily Bot starting — mode=%s", mode)
 
     await asyncio.gather(
         feed.connect(),

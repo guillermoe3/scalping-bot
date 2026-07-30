@@ -1,5 +1,8 @@
 import asyncio
 
+import pytest
+
+import clock
 from execution import ExecutionEngine
 from main import wire_strategy
 from state import Candle, MarketState, Side
@@ -94,3 +97,72 @@ def test_on_trade_handler_checks_pending_entries():
     asyncio.run(feed.trade_handlers[0](98.9, 1.0, False, 0.0))
 
     assert state.position is not None
+
+
+from daily_execution import DailyExecutionEngine
+from daily_state import DailyClose, DailyState, append_close
+from main import wire_daily_strategy
+
+
+class _FakeDailyFeed:
+    def __init__(self):
+        self.candle_1d_handlers = []
+
+    def on_candle_1d(self, fn):
+        self.candle_1d_handlers.append(fn)
+
+
+def _rising_history(n: int = 40, usdt_balance: float = 1000.0) -> DailyState:
+    state = DailyState(usdt_balance=usdt_balance)
+    for i in range(n):
+        append_close(state, timestamp=i * 86_400_000, close=100.0 + i)
+    return state
+
+
+def test_wire_daily_strategy_registers_one_candle_handler():
+    state = DailyState()
+    feed = _FakeDailyFeed()
+    engine = DailyExecutionEngine(state)
+
+    wire_daily_strategy(state, feed, engine)
+
+    assert len(feed.candle_1d_handlers) == 1
+
+
+def test_on_candle_1d_updates_equity_peak_and_persists():
+    state = _rising_history(40)
+    feed = _FakeDailyFeed()
+    engine = DailyExecutionEngine(state)
+    wire_daily_strategy(state, feed, engine)
+
+    asyncio.run(feed.candle_1d_handlers[0](DailyClose(timestamp=40 * 86_400_000, close=140.0)))
+
+    assert state.equity_peak_usdt > 0.0
+    assert state.last_rebalance_date == clock.today_utc()
+
+
+def test_on_candle_1d_forces_flat_when_breaker_already_active():
+    state = _rising_history(40, usdt_balance=50.0)
+    state.btc_balance = 1.0  # ~74% exposure at price 140 — well above the 10pp band
+    state.breaker_active = True
+    feed = _FakeDailyFeed()
+    engine = DailyExecutionEngine(state)
+    wire_daily_strategy(state, feed, engine)
+
+    asyncio.run(feed.candle_1d_handlers[0](DailyClose(timestamp=40 * 86_400_000, close=140.0)))
+
+    assert state.btc_balance == pytest.approx(0.0, abs=1e-6)
+
+
+def test_on_candle_1d_calls_on_breaker_tripped_hook():
+    state = _rising_history(40, usdt_balance=400.0)
+    state.equity_peak_usdt = 1000.0  # current equity (400) is a 60% drawdown from this peak
+    captured = []
+    feed = _FakeDailyFeed()
+    engine = DailyExecutionEngine(state)
+    wire_daily_strategy(state, feed, engine, on_breaker_tripped=captured.append)
+
+    asyncio.run(feed.candle_1d_handlers[0](DailyClose(timestamp=40 * 86_400_000, close=140.0)))
+
+    assert len(captured) == 1
+    assert state.breaker_active is True
