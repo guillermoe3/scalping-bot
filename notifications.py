@@ -80,6 +80,22 @@ class TelegramNotifier:
         )
         self._enqueue(text)
 
+    def notify_rebalance(self, event: dict) -> None:
+        text = (
+            f"⚖️ Rebalanceo {event['side'].upper()} BTC/USDT\n"
+            f"Monto: {event['btc_amount']:.6f} BTC @ ${event['price']:,.2f}\n"
+            f"Fee: ${event['fee']:,.2f}  |  exposición nueva: {event['new_exposure']*100:.1f}%"
+        )
+        self._enqueue(text)
+
+    def notify_circuit_breaker(self, drawdown_pct: float, equity_usdt: float) -> None:
+        text = (
+            "🛑 CIRCUIT BREAKER ACTIVADO (TSMOM)\n"
+            f"Drawdown desde el pico: {drawdown_pct*100:.1f}%  |  equity: ${equity_usdt:,.2f}\n"
+            "Posición forzada a flat. No se abren nuevas posiciones hasta reset manual."
+        )
+        self._enqueue(text)
+
     def _enqueue(self, text: str) -> None:
         if not self._enabled:
             return

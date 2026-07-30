@@ -318,3 +318,43 @@ def test_on_day_rolled_over_sends_summary_and_rearms_kill_switch_alert():
 
     on_trade_closed(_full_close_trade(net=-5.0))  # kill switch still active next day
     assert notifier._queue.qsize() == 2  # fires again — was re-armed by the rollover
+
+
+def test_notify_rebalance_formats_side_amount_price_fee_and_exposure():
+    notifier = TelegramNotifier("token123", "chat123")
+
+    notifier.notify_rebalance({
+        "side": "buy", "btc_amount": 0.01, "price": 50000.0,
+        "fee": 0.5, "new_exposure": 0.50,
+    })
+
+    text = notifier._queue.get_nowait()
+    assert text == (
+        "⚖️ Rebalanceo BUY BTC/USDT\n"
+        "Monto: 0.010000 BTC @ $50,000.00\n"
+        "Fee: $0.50  |  exposición nueva: 50.0%"
+    )
+
+
+def test_notify_circuit_breaker_formats_drawdown_and_equity():
+    notifier = TelegramNotifier("token123", "chat123")
+
+    notifier.notify_circuit_breaker(drawdown_pct=0.52, equity_usdt=4800.0)
+
+    text = notifier._queue.get_nowait()
+    assert text == (
+        "🛑 CIRCUIT BREAKER ACTIVADO (TSMOM)\n"
+        "Drawdown desde el pico: 52.0%  |  equity: $4,800.00\n"
+        "Posición forzada a flat. No se abren nuevas posiciones hasta reset manual."
+    )
+
+
+def test_notify_rebalance_disabled_when_no_credentials():
+    notifier = TelegramNotifier(None, None)
+
+    notifier.notify_rebalance({
+        "side": "sell", "btc_amount": 0.01, "price": 50000.0,
+        "fee": 0.5, "new_exposure": 0.0,
+    })
+
+    assert notifier._queue.empty()
