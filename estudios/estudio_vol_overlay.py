@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import math
-import statistics
 import sys
 from typing import List
 
 from estudios import estudio_ma, estudio_momentum
 from estudios.nucleo import (
+    VENTANA_SIGMA,
+    exposiciones,
     metricas_estrategia,
     peor_mes,
     retornos_diarios,
@@ -16,7 +16,6 @@ from estudios.nucleo import (
 from estudios.reporte import escribir_reporte
 
 SIGMA_TARGETS = (0.20, 0.30, 0.40)
-VENTANA_SIGMA = 30
 
 PREREGISTRO = {
     "rol": "M3 vol targeting — CONDICIONAL: corre solo si alguna celda de M1/M2 paso calibracion Y verificacion (spec 2026-07-15)",
@@ -25,18 +24,6 @@ PREREGISTRO = {
     "umbral_adopcion": "en calibracion Y verificacion: mejora max drawdown Y peor mes calendario vs la version cruda, Y media de r_strat >= 1/2 de la cruda",
     "celda_base": "la mejor celda ganadora de M1/M2 en BTC (mayor Sharpe de verificacion), pasada por CLI",
 }
-
-
-def exposiciones(rets: List[float], sigma_target: float) -> List[float]:
-    """Volatility-targeted exposure decided at the close of each day."""
-    out: List[float] = []
-    for t in range(len(rets)):
-        if t < VENTANA_SIGMA:
-            out.append(0.0)
-            continue
-        sd = statistics.stdev(rets[t - VENTANA_SIGMA + 1 : t + 1]) * math.sqrt(365)
-        out.append(min(1.0, sigma_target / sd) if sd > 0 else 0.0)
-    return out
 
 
 def _posiciones_base(args, closes: List[float]) -> List[float]:

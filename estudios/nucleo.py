@@ -209,3 +209,20 @@ def cambios_de_posicion(posiciones: list[float]) -> int:
     return sum(
         1 for t in range(1, len(posiciones)) if posiciones[t] != posiciones[t - 1]
     )
+
+
+# --- Vol-targeting overlay (M3 study + live daily strategy) ---
+
+VENTANA_SIGMA = 30
+
+
+def exposiciones(rets: list[float], sigma_target: float) -> list[float]:
+    """Volatility-targeted exposure decided at the close of each day."""
+    out: list[float] = []
+    for t in range(len(rets)):
+        if t < VENTANA_SIGMA:
+            out.append(0.0)
+            continue
+        sd = statistics.stdev(rets[t - VENTANA_SIGMA + 1 : t + 1]) * math.sqrt(365)
+        out.append(min(1.0, sigma_target / sd) if sd > 0 else 0.0)
+    return out
